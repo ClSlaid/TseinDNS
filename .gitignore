@@ -1,2 +1,6 @@
-/target
+# developments
 /.vscode
+/.idea
+
+# target files
+/target

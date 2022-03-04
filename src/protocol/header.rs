@@ -13,7 +13,7 @@ const RA_MASK: u8 = QR_MASK;
 const Z_MASK: u8 = 0x70;
 const RC_MASK: u8 = 0x0f;
 
-/// DNS Header descripted in [RFC1035](https://datatracker.ietf.org/doc/html/rfc1035)
+/// DNS Header described in [RFC1035](https://datatracker.ietf.org/doc/html/rfc1035)
 pub struct Header {
     /// transaction ID of the DNS packet
     id: u16,
@@ -21,7 +21,7 @@ pub struct Header {
     is_query: bool,
     /// types of this DNS packet
     opcode: Op,
-    /// is authorated answer
+    /// is authorized answer
     is_auth: bool,
     /// is truncated packet
     is_trunc: bool,
@@ -39,8 +39,8 @@ pub struct Header {
     answers: u16,
     /// number of name server Resource Records in the authority records section
     name_servers: u16,
-    /// number of resource records in addtional section
-    addtionals: u16,
+    /// number of resource records in additional section
+    additional: u16,
 }
 
 impl PacketContent for Header {
@@ -66,7 +66,7 @@ impl PacketContent for Header {
         let questions = buf.get_u16();
         let answers = buf.get_u16();
         let name_servers = buf.get_u16();
-        let addtionals = buf.get_u16();
+        let additional = buf.get_u16();
         Ok(Self {
             id,
             is_query,
@@ -80,7 +80,7 @@ impl PacketContent for Header {
             questions,
             answers,
             name_servers,
-            addtionals,
+            additional,
         })
     }
 
@@ -105,39 +105,18 @@ impl PacketContent for Header {
         buf.put_u16(self.questions);
         buf.put_u16(self.answers);
         buf.put_u16(self.name_servers);
-        buf.put_u16(self.addtionals);
+        buf.put_u16(self.additional);
         buf
     }
 }
 
-/// Opcode
-#[derive(Debug)]
-pub enum Op {
-    Query,
-    IQuery,
-    Status,
-    Reserved(u8),
-}
-
-impl From<u8> for Op {
-    fn from(opcode: u8) -> Self {
-        match opcode {
-            0 => Self::Query,
-            1 => Self::IQuery,
-            2 => Self::Status,
-            x => Self::Reserved(x),
-        }
-    }
-}
-
-impl From<Op> for u8 {
-    fn from(op: Op) -> Self {
-        match op {
-            Op::Query => 0,
-            Op::IQuery => 1,
-            Op::Status => 2,
-            Op::Reserved(x) => x,
-        }
+// operation code in DNS Header
+pub_map_enum! {
+    Op<u8> {
+        Query => 0,
+        IQuery => 1,
+        Status => 2;
+        Reserved
     }
 }
 
@@ -153,40 +132,14 @@ impl Display for Op {
     }
 }
 
-enum Rcode {
-    NoError,
-    FormatError,
-    ServFail,
-    NameError, // NXDOMAIN
-    NotImpl,
-    Refused,
-    Reserved(u8),
-}
-
-impl From<u8> for Rcode {
-    fn from(code: u8) -> Rcode {
-        match code {
-            0 => Self::NoError,
-            1 => Self::FormatError,
-            2 => Self::ServFail,
-            3 => Self::NameError,
-            4 => Self::NotImpl,
-            5 => Self::Refused,
-            x => Self::Reserved(x),
-        }
-    }
-}
-
-impl From<Rcode> for u8 {
-    fn from(rcode: Rcode) -> Self {
-        match rcode {
-            Rcode::NoError => 0,
-            Rcode::FormatError => 1,
-            Rcode::ServFail => 2,
-            Rcode::NameError => 3,
-            Rcode::NotImpl => 4,
-            Rcode::Refused => 5,
-            Rcode::Reserved(x) => x,
-        }
+pub_map_enum! {
+    Rcode<u8> {
+        NoError => 0,
+        FormatError => 1,
+        ServFail => 2,
+        NameError => 3,     // NXDOMAIN
+        NotImpl => 4,
+        Refused => 5;
+        Reserved
     }
 }

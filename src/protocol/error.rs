@@ -4,8 +4,6 @@ use thiserror::Error;
 
 use super::{domain::Name, header::Op};
 
-pub type Result<T> = std::result::Result<T, PacketError>;
-
 /// Error occurred in parsing DNS packets
 #[derive(Error, Debug)]
 pub enum PacketError {

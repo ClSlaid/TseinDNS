@@ -1,19 +1,4 @@
 use bytes::{Bytes, BytesMut};
-/// DNS packet header
-mod header;
-
-/// DNS packet question
-mod question;
-
-/// DNS Resource Record
-mod rr;
-
-/// Domain names
-mod domain;
-
-/// Error types
-mod error;
-
 trait PacketContent {
     fn parse(packet: Bytes, pos: usize) -> Result<Self, error::PacketError>
     where
@@ -21,43 +6,97 @@ trait PacketContent {
     fn into_bytes(self) -> BytesMut;
 }
 
-/// Type of Resource Record
-pub enum RRType {
-    A,
-    AAAA,
-    CNAME,
-    MX,
-    NS,
-    SOA,
-    UNKNOWN(u16),
-}
+/// this (toy) macron are used for simplify definition of map-like enumerators.
+///
+/// using:
+/// ```
+/// pub_map_enum!{
+///     Foo<i32> {
+///         Foo => 0,
+///         Bar => 1;  // <- this is a ';' not a ','
+///         Default    // fallback name
+///     }
+/// }
+/// ```
+/// defines:
+/// ```
+/// pub enum Foo {
+///     Foo,
+///     Bar,
+///     Default(i32),   // unmatched value will fallback into Unknown
+/// }
+/// ```
+/// and will automatically implements `From<i32>` for `Foo` and `From<Foo>` for `i32`.
+macro_rules! pub_map_enum {
+    ($name:ident <$t:ty> {$($key: ident => $value: expr),*; $fallback:ident}) => {
+        #[derive(PartialEq, Eq, Debug)]
+        pub enum $name {
+            $($key,)*
+            $fallback($t),
+        }
 
-// TODO: replace redundant code with macron
-impl From<u16> for RRType {
-    fn from(rtype: u16) -> Self {
-        match rtype {
-            1 => Self::A,
-            2 => Self::NS,
-            5 => Self::CNAME,
-            6 => Self::SOA,
-            15 => Self::MX,
-            28 => Self::AAAA,
-            x => Self::UNKNOWN(x),
+        impl From<$t> for $name {
+            fn from(value: $t) -> Self {
+                match value {
+                    $($value => Self::$key,)*
+                    value => Self::$fallback(value),
+                }
+            }
+        }
+
+        impl From<$name> for $t {
+            fn from(key: $name) -> Self {
+                match key {
+                    $($name::$key => $value,)*
+                    $name::$fallback(value) => value,
+                }
+            }
         }
     }
 }
 
-// TODO: replace redundant code with macron
-impl From<RRType> for u16 {
-    fn from(rtype: RRType) -> Self {
-        match rtype {
-            RRType::A => 1,
-            RRType::NS => 2,
-            RRType::CNAME => 5,
-            RRType::SOA => 6,
-            RRType::MX => 15,
-            RRType::AAAA => 28,
-            RRType::UNKNOWN(x) => x,
-        }
-    }
+// Type of Resource Record
+pub_map_enum! {RRType<u16> {
+    A => 1,
+    NS => 2,
+    CNAME => 5,
+    SOA => 6,
+    MX => 15,
+    AAAA => 28;
+    UNKNOWN
+}}
+
+// QClass
+pub_map_enum! {RRClass<u16> {
+    Reserved => 0,
+    Internet => 1,
+    Chaos => 3,
+    Hesiod => 4;
+    Unknown
+}}
+
+// testing macron is enough
+#[test]
+fn test_pub_map_enum() {
+    pub_map_enum! {Foo<i32>{
+        MyFoo => 0,
+        MyBar => 1;
+        Unknown
+    }}
+    let my_foo = Foo::from(0);
+    assert_eq!(my_foo, Foo::MyFoo);
+    let unknown = Foo::from(114514);
+    assert_eq!(unknown, Foo::Unknown(114514));
+    assert_eq!(i32::from(my_foo), 0);
+    assert_eq!(i32::from(unknown), 114514);
 }
+/// Domain names
+mod domain;
+/// Error types
+mod error;
+/// DNS packet header
+mod header;
+/// DNS packet question
+mod question;
+/// DNS Resource Record
+mod rr;

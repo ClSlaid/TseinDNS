@@ -1,9 +1,9 @@
-use bytes::Buf;
+use bytes::{Buf, BufMut, BytesMut};
 
 mod rdata;
 use self::rdata::Rdata;
 
-use super::{domain::Name, error::PacketError};
+use super::{domain::Name, error::PacketError, RRClass};
 use crate::protocol::{PacketContent, RRType};
 use rdata::{a::A, aaaa::AAAA, cname::CNAME, mx::MX, ns::NS, soa::SOA, unknown::UNKNOWN};
 
@@ -35,15 +35,17 @@ use rdata::{a::A, aaaa::AAAA, cname::CNAME, mx::MX, ns::NS, soa::SOA, unknown::U
 pub struct RR {
     domain: Name,
     ttl: u32,
-    length: usize, // total length of RR in packet
-    rdata: RDATA,
+    ty: RRType,
+    class: RRClass,
+    size: usize, // total length of RR in packet
+    rdata: RRData,
 }
 
 // TODO: replace redundant code with macron
-/// ## RDATA
-/// The `RDATA` section of `RR`.
+/// ## RRData
+/// The `RRData` section of `RR`.
 /// It also implicitly points out the `TYPE` of `RR`.
-pub enum RDATA {
+pub enum RRData {
     A(A),
     AAAA(AAAA),
     CNAME(CNAME),
@@ -51,6 +53,30 @@ pub enum RDATA {
     NS(NS),
     SOA(SOA),
     UNKNOWN(UNKNOWN),
+}
+impl RRData {
+    pub fn get_type(&self) -> RRType {
+        match self {
+            Self::A(_) => RRType::A,
+            Self::AAAA(_) => RRType::AAAA,
+            Self::CNAME(_) => RRType::CNAME,
+            Self::MX(_) => RRType::MX,
+            Self::NS(_) => RRType::NS,
+            Self::SOA(_) => RRType::SOA,
+            Self::UNKNOWN(unknown) => unknown.get_type(),
+        }
+    }
+    pub fn to_bytes(self) -> Result<BytesMut, PacketError> {
+        match self {
+            Self::A(a) => a.to_bytes(),
+            Self::AAAA(aaaa) => aaaa.to_bytes(),
+            Self::CNAME(cname) => cname.to_bytes(),
+            Self::MX(mx) => mx.to_bytes(),
+            Self::NS(ns) => ns.to_bytes(),
+            Self::SOA(soa) => soa.to_bytes(),
+            Self::UNKNOWN(unknown) => unknown.to_bytes(),
+        }
+    }
 }
 
 // Parse RDATA
@@ -60,13 +86,13 @@ macro_rules! parse_rdata {
         $(
             RRType::$t => {
                 let (rdata, end) = $t::parse($packet, $begin)?;
-                (RDATA::$t(rdata), end)
+                (RRData::$t(rdata), end)
             }
         )*
             RRType::UNKNOWN(x) => {
                 let (mut unknown, end) = UNKNOWN::parse_typeless($packet, $begin)?;
                 unknown.set_type(x);
-                (RDATA::UNKNOWN(unknown), end)
+                (RRData::UNKNOWN(unknown), end)
             }
     }
     }
@@ -78,18 +104,37 @@ impl PacketContent for RR {
         Self: Sized,
     {
         let mut p = packet.clone();
-        let (name, name_end) = Name::parse(packet.clone(), pos)?;
+        let (domain, name_end) = Name::parse(packet.clone(), pos)?;
         p.advance(name_end);
-        let rtype = RRType::from(p.get_u16());
-        let class = p.get_u16();
-        let ttl = p.get_u16();
+        let ty = RRType::from(p.get_u16());
+        let class = RRClass::from(p.get_u16());
+        let ttl = p.get_u32();
         let rdata_begin = name_end + 6;
-        let (rdata, rdata_end) =
-            parse_rdata!(rtype, packet, rdata_begin, A, AAAA, NS, CNAME, SOA, MX);
-        unimplemented!()
+        let (rdata, rdata_end) = parse_rdata!(ty, packet, rdata_begin, A, AAAA, NS, CNAME, SOA, MX);
+        let size = rdata_end - pos;
+        Ok(Self {
+            domain,
+            ty,
+            class,
+            ttl,
+            size,
+            rdata,
+        })
     }
 
-    fn into_bytes(self) -> bytes::BytesMut {
-        todo!()
+    #[inline]
+    fn size(&self) -> usize {
+        self.size
+    }
+
+    fn into_bytes(self) -> Result<BytesMut, PacketError> {
+        let mut buf = BytesMut::new();
+        buf.put(self.domain.as_bytes_uncompressed());
+        buf.put_u16(self.ty.into());
+        buf.put_u16(self.class.into());
+        buf.put_u32(self.ttl);
+        let rdata = self.rdata.to_bytes()?;
+        buf.put_slice(&rdata[..]);
+        Ok(buf)
     }
 }

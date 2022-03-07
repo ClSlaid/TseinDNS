@@ -3,7 +3,7 @@ Tsein DNS is a robust and high performance DNS resolver supporting multiple DNS 
 
 > *Tsein* indicates *Arrow* in Hunanese.
 
-*Yet it is still under development.*
+*It is currently still under development.*
 
 ## Software Architecture Planning
 The software will implements a connection manager, a DNS cache and other utilities for DNS resolving.
@@ -18,3 +18,7 @@ If implemented properly, along with every DNS packet should comes a `pipe`, uppe
 ### DNS cache
 
 It's obvious that even in the world of domain names we can still come up with [locality of references](https://en.wikipedia.org/wiki/Locality_of_reference). So that a simple LRU cache can empower us with ideal hit rate and memory usage.
+
+## License
+
+This work is licensed under Mozilla Public License v2.0, Use it for free.

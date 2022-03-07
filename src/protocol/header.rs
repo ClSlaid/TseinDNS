@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 use std::fmt::Display;
 
-use super::PacketContent;
+use super::{error::PacketError, PacketContent};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
 const QR_MASK: u8 = 0x80;
@@ -44,7 +44,7 @@ pub struct Header {
 }
 
 impl PacketContent for Header {
-    fn parse(packet: Bytes, _pos: usize) -> Result<Self, super::error::PacketError>
+    fn parse(packet: Bytes, _pos: usize) -> Result<Self, PacketError>
     where
         Self: Sized,
     {
@@ -84,7 +84,7 @@ impl PacketContent for Header {
         })
     }
 
-    fn into_bytes(self) -> bytes::BytesMut {
+    fn into_bytes(self) -> Result<BytesMut, PacketError> {
         let mut buf = BytesMut::with_capacity(12);
         buf.put_u16(self.id);
         let a = {
@@ -106,7 +106,12 @@ impl PacketContent for Header {
         buf.put_u16(self.answers);
         buf.put_u16(self.name_servers);
         buf.put_u16(self.additional);
-        buf
+        Ok(buf)
+    }
+
+    #[inline]
+    fn size(&self) -> usize {
+        12
     }
 }
 

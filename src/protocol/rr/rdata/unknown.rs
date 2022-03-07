@@ -1,4 +1,4 @@
-use bytes::Buf;
+use bytes::{Buf, BufMut, Bytes, BytesMut};
 
 use crate::protocol::{error::PacketError, rr::RRType};
 
@@ -7,10 +7,14 @@ use super::Rdata;
 pub struct UNKNOWN {
     rtype: RRType,
     length: usize,
-    data: Vec<u8>,
+    data: Bytes, // TODO: data maybe empty, fix it
 }
 
 impl UNKNOWN {
+    pub fn get_type(&self) -> RRType {
+        self.rtype
+    }
+
     pub fn set_type(&mut self, rtype: u16) {
         self.rtype = RRType::UNKNOWN(rtype);
     }
@@ -21,11 +25,7 @@ impl UNKNOWN {
     {
         let mut p = packet.clone();
         let length = p.get_u16() as usize;
-        let data = (0..length).fold(vec![], |mut acc, _| {
-            let byte = p.get_u8();
-            acc.push(byte);
-            acc
-        });
+        let data = Bytes::copy_from_slice(&p[..length]);
         let unknown = Self {
             length,
             rtype: RRType::UNKNOWN(255), // always set as 255
@@ -43,6 +43,11 @@ impl Rdata for UNKNOWN {
     where
         Self: Sized,
     {
+        let packet_len = packet.len();
+        if pos < 8 || pos > packet_len {
+            return Err(PacketError::FormatError);
+        }
+
         // Get type of unknown
         let type_pos = pos - 8;
         let mut p = packet.clone();
@@ -51,8 +56,14 @@ impl Rdata for UNKNOWN {
 
         // Parse remaining parts of the packet
         let mut p = packet;
+        p.advance(pos);
         let length = p.get_u16() as usize;
-        let data = Vec::from(&p.chunk()[..length]);
+
+        if length + pos > packet_len {
+            return Err(PacketError::FormatError);
+        }
+
+        let data = Bytes::copy_from_slice(&p[..length]);
         let unknown = Self {
             length,
             rtype: RRType::UNKNOWN(tp),
@@ -61,4 +72,59 @@ impl Rdata for UNKNOWN {
         let end = pos + 2 + length;
         Ok((unknown, end))
     }
+
+    fn to_bytes(&self) -> Result<BytesMut, PacketError> {
+        let mut buf = BytesMut::with_capacity(self.length + 2);
+        buf.put_u16(self.length as u16);
+        buf.put_slice(&self.data);
+        Ok(buf)
+    }
+}
+
+#[test]
+fn test_set_rtype() {
+    let rtype = RRType::UNKNOWN(233);
+    let length = 0;
+    let data = Bytes::new();
+    let mut u = UNKNOWN {
+        rtype,
+        length,
+        data,
+    };
+    assert_eq!(u.get_type(), rtype);
+
+    let rtype = 114;
+    u.set_type(rtype);
+    assert_eq!(u.get_type(), RRType::from(rtype));
+}
+
+#[test]
+fn test_parse_and_to_bytes() {
+    // test invalid
+    let invalid = Bytes::from([0_u8, 10, 0, 0, 2, 0].to_vec());
+    let parsed = UNKNOWN::parse(invalid, 0);
+    assert!(parsed.is_err());
+    // test without type
+    let data = Bytes::from([0_u8, 4, 0, 0, 2, 0].to_vec());
+    let parsed = UNKNOWN::parse(data.clone(), 0);
+    assert!(parsed.is_err());
+    // test parse_typeless and to_bytes()
+    let parsed = UNKNOWN::parse_typeless(data.clone(), 0);
+    let (unknown, end) = parsed.unwrap();
+    assert_eq!(end, data.len());
+    assert_eq!(unknown.to_bytes().unwrap()[..], data[..]);
+    // test parse()
+    let full_data = Bytes::from(
+        [
+            0, 233_u8, 0, 0, 0, 0, 0, 0, // 233 is the unknown type
+            0_u8, 4, 0, 0, 2, 0, // this line is rdlength and rdata section
+        ]
+        .to_vec(),
+    );
+    let parsed = UNKNOWN::parse(full_data.clone(), 8);
+    assert!(parsed.is_ok());
+    let (unknown, end) = parsed.unwrap();
+    assert_eq!(end, full_data.len());
+    assert_eq!(unknown.get_type(), RRType::from(233));
+    assert_eq!(unknown.to_bytes().unwrap()[..], data[..]);
 }

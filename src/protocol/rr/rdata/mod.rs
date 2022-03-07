@@ -1,4 +1,4 @@
-use bytes::Bytes;
+use bytes::{Bytes, BytesMut};
 
 use crate::protocol::{domain::Name, error::PacketError};
 
@@ -16,4 +16,12 @@ pub trait Rdata {
     fn parse(packet: Bytes, pos: usize) -> Result<(Self, usize), PacketError>
     where
         Self: Sized;
+    fn to_bytes(&self) -> Result<BytesMut, PacketError>;
+}
+
+pub(self) fn try_into_rdata_length<N>(rdata_length: N) -> Result<u16, PacketError>
+where
+    N: TryInto<u16>,
+{
+    rdata_length.try_into().map_err(|_| PacketError::ServFail)
 }

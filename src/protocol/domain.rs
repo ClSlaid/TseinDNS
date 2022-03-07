@@ -1,6 +1,6 @@
 use std::fmt::{Debug, Display};
 
-use bytes::Bytes;
+use bytes::{BufMut, Bytes, BytesMut};
 use color_eyre::{eyre::eyre, Result};
 
 use crate::protocol::error::PacketError;
@@ -10,6 +10,7 @@ const MAX_NAME_LENGTH: usize = 253;
 
 const PTR_MASK: u8 = 0xc0;
 
+// TODO: replace `Label` with bytes::Bytes to reduce memory usage.
 type Label = String;
 
 /// ## `Name` represents domain name.
@@ -17,14 +18,14 @@ type Label = String;
 /// ```text
 /// Name {vec![Label("www"), Label("google"), Label("com"), Label("cn")]}
 /// ```
-
+#[derive(Clone)]
 pub struct Name {
     labels: Vec<Label>,
     len: usize,
 }
 
 impl Name {
-    pub fn new(s: &str) -> Result<Self> {
+    pub fn try_from(s: &str) -> Result<Self> {
         let mut labels = vec![];
         let mut total_len = 0;
         for l in s.split('.').filter(|p| !p.is_empty()) {
@@ -126,6 +127,20 @@ impl Name {
         }
     }
 
+    pub fn as_bytes_uncompressed(&self) -> BytesMut {
+        let mut buf = BytesMut::with_capacity(self.len() + 1);
+        for label in self.labels.iter() {
+            buf.put_u8(label.len() as u8);
+            for byte in label.as_bytes().iter() {
+                buf.put_u8(*byte);
+            }
+        }
+        buf.put_u8(0);
+        buf
+    }
+
+    // TODO: implement fn as_bytes_compressed, require a `CompressWriter` struct.
+
     pub fn is_subdomain_of(&self, other: &Self) -> bool {
         other
             .labels
@@ -170,16 +185,16 @@ mod domain_test {
     use bytes::{Buf, BufMut, Bytes, BytesMut};
     #[test]
     fn test_len() {
-        let d1 = Name::new("example.com").unwrap();
-        let d2 = Name::new("example.com.").unwrap();
+        let d1 = Name::try_from("example.com").unwrap();
+        let d2 = Name::try_from("example.com.").unwrap();
         assert_eq!(d1.len(), 12);
         assert_eq!(d1.len(), d2.len());
     }
 
     #[test]
     fn test_subdomain() {
-        let domain = Name::new("example.com").unwrap();
-        let subdomain = Name::new("example.example.com").unwrap();
+        let domain = Name::try_from("example.com").unwrap();
+        let subdomain = Name::try_from("example.example.com").unwrap();
         assert!(subdomain.is_subdomain_of(&domain));
     }
 
@@ -202,6 +217,14 @@ mod domain_test {
             Bytes::from(buf)
         }
 
+        // test invalid domain
+        let invalid = Bytes::from(b"\x03com\x03".to_vec());
+        let parsed = Name::parse(invalid, 0);
+        assert!(parsed.is_err());
+        let invalid = Bytes::from(b"\x03com".to_vec());
+        let parsed = Name::parse(invalid, 0);
+        assert!(parsed.is_err());
+
         // test simple domain
         let packet = gen_simple_domain_name("example.com");
         let (pd, pos) = Name::parse(packet.clone(), 0).unwrap();
@@ -218,5 +241,12 @@ mod domain_test {
         let (pd, end) = Name::parse(packet.clone(), pos).unwrap();
         assert_eq!(pd.to_string(), String::from("example.example.com."));
         assert_eq!(end, packet.len());
+    }
+
+    #[test]
+    fn test_as_bytes_uncompressed() {
+        let name = Name::try_from("sm.ms").unwrap();
+        let encoded: &[u8] = &[2, b's', b'm', 2, b'm', b's', 0];
+        assert_eq!(name.as_bytes_uncompressed(), encoded);
     }
 }

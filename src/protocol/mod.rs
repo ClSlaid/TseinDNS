@@ -1,9 +1,12 @@
 use bytes::{Bytes, BytesMut};
+
+use self::error::PacketError;
 trait PacketContent {
-    fn parse(packet: Bytes, pos: usize) -> Result<Self, error::PacketError>
+    fn size(&self) -> usize;
+    fn parse(packet: Bytes, pos: usize) -> Result<Self, PacketError>
     where
         Self: Sized;
-    fn into_bytes(self) -> BytesMut;
+    fn into_bytes(self) -> Result<BytesMut, PacketError>;
 }
 
 /// this (toy) macron are used for simplify definition of map-like enumerators.
@@ -29,7 +32,7 @@ trait PacketContent {
 /// and will automatically implements `From<i32>` for `Foo` and `From<Foo>` for `i32`.
 macro_rules! pub_map_enum {
     ($name:ident <$t:ty> {$($key: ident => $value: expr),*; $fallback:ident}) => {
-        #[derive(PartialEq, Eq, Debug)]
+        #[derive(PartialEq, Eq, Debug, Copy, Clone)]
         pub enum $name {
             $($key,)*
             $fallback($t),
@@ -100,3 +103,6 @@ mod header;
 mod question;
 /// DNS Resource Record
 mod rr;
+
+#[cfg(test)]
+mod integration_tests {}

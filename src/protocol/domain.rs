@@ -43,7 +43,9 @@ impl Name {
         })
     }
 
-    // length of domain name string
+    /// length of domain name string
+    ///
+    /// For example, `"example.com.".len()` is 12
     pub fn len(&self) -> usize {
         self.len
     }

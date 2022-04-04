@@ -90,6 +90,8 @@ fn test_parse() {
         0, 1, // class
     ]);
 
+    let size = bytes.len();
+
     let parsed = Question::parse(bytes, 0);
     assert!(parsed.is_ok());
     let ques = parsed.unwrap();
@@ -101,4 +103,5 @@ fn test_parse() {
     assert_eq!(n, "example.com.");
     assert_eq!(ty, RRType::A);
     assert_eq!(class, RRClass::Internet);
+    assert_eq!(size, ques.size());
 }

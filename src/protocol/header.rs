@@ -43,6 +43,72 @@ pub struct Header {
     additional: u16,
 }
 
+impl Header {
+    /// get transaction id
+    pub fn get_id(&self) -> u16 {
+        self.id
+    }
+    /// is a dns query or not
+    pub fn is_query(&self) -> bool {
+        self.is_query
+    }
+
+    /// opcode of the dns packet
+    pub fn get_op(&self) -> Op {
+        self.opcode
+    }
+
+    /// is the answer authorized answer
+    pub fn is_auth(&self) -> bool {
+        self.is_auth
+    }
+
+    /// is the packet truncated
+    pub fn is_trunc(&self) -> bool {
+        self.is_trunc
+    }
+
+    /// is the query recursion desired
+    pub fn is_rec_des(&self) -> bool {
+        self.is_rec_des
+    }
+
+    /// is the dns server recursion available
+    pub fn is_rec_avl(&self) -> bool {
+        self.is_rec_avl
+    }
+
+    /// get the z record of the dns server
+    pub fn get_z(&self) -> u8 {
+        self.z
+    }
+
+    /// get the rcode in header
+    pub fn get_rcode(&self) -> Rcode {
+        self.response
+    }
+
+    /// how many questions are there in the packet
+    pub fn question_count(&self) -> u16 {
+        self.questions
+    }
+
+    /// how many answers are there in the packet
+    pub fn answer_count(&self) -> u16 {
+        self.answers
+    }
+
+    /// how many ns records are there in the packet
+    pub fn ns_count(&self) -> u16 {
+        self.name_servers
+    }
+
+    /// how many addtional RRs are in the packet
+    pub fn addtional_count(&self) -> u16 {
+        self.additional
+    }
+}
+
 impl PacketContent for Header {
     fn parse(packet: Bytes, _pos: usize) -> Result<Self, PacketError>
     where
@@ -52,7 +118,7 @@ impl PacketContent for Header {
         let id = buf.get_u16();
 
         let a = buf.get_u8();
-        let is_query = a & QR_MASK == QR_MASK;
+        let is_query = a & QR_MASK != QR_MASK;
         let is_auth = a & AA_MASK == AA_MASK;
         let opcode = Op::from((a & OP_MASK) >> 3);
         let is_trunc = a & TC_MASK == TC_MASK;
@@ -60,7 +126,7 @@ impl PacketContent for Header {
 
         let b = buf.get_u8();
         let is_rec_avl = b & RA_MASK == RA_MASK;
-        let z = (b & Z_MASK) >> 4;
+        let z = (b & Z_MASK) >> 5;
         let response = Rcode::from(b & RC_MASK);
 
         let questions = buf.get_u16();
@@ -146,5 +212,47 @@ pub_map_enum! {
         NotImpl => 4,
         Refused => 5;
         Reserved
+    }
+}
+
+mod test {
+    use bytes::{BufMut, Bytes, BytesMut};
+
+    use super::{Op, Rcode};
+    use crate::protocol::PacketContent;
+    #[test]
+    fn test_parse_header() {
+        let mut packet = BytesMut::new();
+        // create header
+        packet.put_u16(0); // id == 0;
+        packet.put_u8(1); // query = True (0); Opcode = QUERY (0); AA = FALSE (0); TC = FALSE (0); RD = TRUE (1)
+        packet.put_u8(0x20); // z = 1; rcode = 0;
+        packet.put_u16(1); // QDCOUNT = 1;
+        packet.put_u16(0); // ANCOUNT = 0;
+        packet.put_u16(0); // NSCOUNT = 0;
+        packet.put_u16(0); // ARCOUNT = 0;
+                           // creat question
+
+        let h_packet = Bytes::from(packet);
+
+        let h_result = super::Header::parse(h_packet, 0);
+        assert!(h_result.is_ok());
+        let h = h_result.unwrap();
+
+        assert_eq!(h.get_id(), 0);
+        assert!(h.is_query());
+        assert_eq!(h.get_op(), Op::Query);
+        assert!(!h.is_auth());
+        assert!(!h.is_trunc());
+        assert!(h.is_rec_des());
+
+        assert!(!h.is_rec_avl());
+        assert_eq!(h.get_z(), 1);
+        assert_eq!(h.get_rcode(), Rcode::NoError);
+
+        assert_eq!(h.question_count(), 1);
+        assert_eq!(h.answer_count(), 0);
+        assert_eq!(h.ns_count(), 0);
+        assert_eq!(h.addtional_count(), 0);
     }
 }

@@ -216,12 +216,12 @@ pub_map_enum! {
 }
 
 mod test {
-    use bytes::{BufMut, Bytes, BytesMut};
-
-    use super::{Op, Rcode};
-    use crate::protocol::PacketContent;
     #[test]
     fn test_parse_header() {
+        use super::{Op, Rcode};
+        use crate::protocol::PacketContent;
+        use bytes::{BufMut, Bytes, BytesMut};
+
         let mut packet = BytesMut::new();
         // create header
         packet.put_u16(0); // id == 0;

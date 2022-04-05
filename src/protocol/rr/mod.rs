@@ -1,4 +1,4 @@
-use bytes::{Buf, BufMut, BytesMut};
+use bytes::{Buf, BufMut, Bytes, BytesMut};
 
 mod rdata;
 use self::rdata::Rdata;
@@ -98,6 +98,11 @@ macro_rules! parse_rdata {
     }
 }
 
+fn rdata_parse(ty: RRType, packet: Bytes, offset: usize) -> Result<(RRData, usize), PacketError> {
+    let (rdata, end) = parse_rdata!(ty, packet, offset, A, AAAA, NS, CNAME, SOA, MX);
+    Ok((rdata, end))
+}
+
 impl PacketContent for RR {
     fn parse(packet: bytes::Bytes, pos: usize) -> Result<Self, PacketError>
     where
@@ -110,7 +115,7 @@ impl PacketContent for RR {
         let class = RRClass::from(p.get_u16());
         let ttl = p.get_u32();
         let rdata_begin = name_end + 6;
-        let (rdata, rdata_end) = parse_rdata!(ty, packet, rdata_begin, A, AAAA, NS, CNAME, SOA, MX);
+        let (rdata, rdata_end) = rdata_parse(ty, packet, rdata_begin)?;
         let size = rdata_end - pos;
         Ok(Self {
             domain,

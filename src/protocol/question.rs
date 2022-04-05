@@ -1,4 +1,4 @@
-use bytes::{Buf, BufMut, Bytes, BytesMut};
+use bytes::{Buf, BufMut, BytesMut};
 
 use super::{domain::Name, error::PacketError, PacketContent, RRClass, RRType};
 
@@ -84,7 +84,7 @@ fn test_build() {
 
 #[test]
 fn test_parse() {
-    let bytes = Bytes::from(vec![
+    let bytes = bytes::Bytes::from(vec![
         7, b'e', b'x', b'a', b'm', b'p', b'l', b'e', 3, b'c', b'o', b'm', 0, // domain name
         0, 1, // type
         0, 1, // class

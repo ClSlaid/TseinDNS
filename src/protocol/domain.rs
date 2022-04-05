@@ -8,7 +8,7 @@ use crate::protocol::error::PacketError;
 const MAX_LABEL_LENGTH: usize = 63;
 const MAX_NAME_LENGTH: usize = 253;
 
-const PTR_MASK: u8 = 0xc0;
+pub const PTR_MASK: u8 = 0xc0;
 
 // TODO: replace `Label` with bytes::Bytes to reduce memory usage.
 type Label = String;

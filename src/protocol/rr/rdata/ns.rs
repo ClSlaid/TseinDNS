@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use bytes::{Buf, BufMut, Bytes, BytesMut};
+use bytes::{Buf, BufMut, BytesMut};
 
 use crate::protocol::{domain::Name, error::PacketError};
 
@@ -61,28 +61,33 @@ impl Display for NS {
     }
 }
 
-#[test]
-fn test_parse() {
-    // test invalid
-    let invalid = Bytes::from(b"\x00\x0f\x07example\x03com\x00".to_vec());
-    let parsed = NS::parse(invalid, 0);
-    assert!(parsed.is_err());
+#[cfg(test)]
+mod ns_tests {
+    use super::{Name, Rdata, NS};
+    use bytes::Bytes;
+    #[test]
+    fn test_parse() {
+        // test invalid
+        let invalid = Bytes::from(b"\x00\x0f\x07example\x03com\x00".to_vec());
+        let parsed = NS::parse(invalid, 0);
+        assert!(parsed.is_err());
 
-    let rdata = Bytes::from(b"\x00\x0d\x07example\x03com\x00".to_vec());
-    let parsed = NS::parse(rdata.clone(), 0);
-    assert!(parsed.is_ok());
-    let (ns, end) = parsed.unwrap();
-    let target = NS::from(Name::try_from("example.com").unwrap());
-    assert_eq!(end, rdata.len());
-    assert_eq!(ns, target);
-}
+        let rdata = Bytes::from(b"\x00\x0d\x07example\x03com\x00".to_vec());
+        let parsed = NS::parse(rdata.clone(), 0);
+        assert!(parsed.is_ok());
+        let (ns, end) = parsed.unwrap();
+        let target = NS::from(Name::try_from("example.com").unwrap());
+        assert_eq!(end, rdata.len());
+        assert_eq!(ns, target);
+    }
 
-#[test]
-fn test_to_bytes() {
-    let rdata = Bytes::from(b"\x00\x0d\x07example\x03com\x00".to_vec());
-    let ns = NS::from(Name::try_from("example.com").unwrap());
-    let bytes = ns.to_bytes();
-    assert!(bytes.is_ok());
-    let bytes = bytes.unwrap();
-    assert_eq!(bytes[..], rdata[..]);
+    #[test]
+    fn test_to_bytes() {
+        let rdata = Bytes::from(b"\x00\x0d\x07example\x03com\x00".to_vec());
+        let ns = NS::from(Name::try_from("example.com").unwrap());
+        let bytes = ns.to_bytes();
+        assert!(bytes.is_ok());
+        let bytes = bytes.unwrap();
+        assert_eq!(bytes[..], rdata[..]);
+    }
 }

@@ -2,6 +2,7 @@ use bytes::{Buf, BufMut, BytesMut};
 
 use super::{domain::Name, error::PacketError, PacketContent, RRClass, RRType};
 
+#[derive(Debug, Clone)]
 pub struct Question {
     name: Name,
     ty: RRType,

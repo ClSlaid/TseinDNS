@@ -4,6 +4,7 @@ use crate::protocol::{error::PacketError, rr::RRType};
 
 use super::Rdata;
 
+#[derive(Debug)]
 pub struct UNKNOWN {
     rtype: RRType,
     length: usize,

@@ -3,6 +3,7 @@ use crate::protocol::error::PacketError;
 use super::{try_into_rdata_length, Name, Rdata};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
+#[derive(Debug)]
 pub struct MX {
     preference: u16,
     domain: Name,

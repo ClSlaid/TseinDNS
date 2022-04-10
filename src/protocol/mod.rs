@@ -1,4 +1,4 @@
-use bytes::{Bytes, BytesMut};
+use bytes::{BufMut, Bytes, BytesMut};
 
 pub use self::{domain::Name, error::PacketError, header::Header, question::Question, rr::RR};
 
@@ -10,6 +10,7 @@ trait PacketContent {
     fn into_bytes(self) -> Result<BytesMut, PacketError>;
 }
 
+// Todo: refact Packet, it sucks
 /// DNS data get from primitive packet
 pub struct Packet {
     pub header: Header,
@@ -20,6 +21,28 @@ pub struct Packet {
 }
 
 impl Packet {
+    // make a plain packet
+    pub fn new_plain_answer(id: u16) -> Self {
+        let h = Header::new_answer(id, 0, 0, 0);
+        Self {
+            header: h,
+            questions: vec![],
+            answers: vec![],
+            authorities: vec![],
+            additions: vec![],
+        }
+    }
+    // make a new query
+    pub fn new_query(id: u16, query: Question) -> Self {
+        let header = Header::new_query(id, 1);
+        Self {
+            header,
+            questions: vec![query],
+            answers: vec![],
+            authorities: vec![],
+            additions: vec![],
+        }
+    }
     // assuming the packet buffer contains at least 1 packet...
     pub fn parse_packet(packet: Bytes, offset: usize) -> Result<Packet, PacketError> {
         let h = Header::parse(packet.clone(), offset)?;
@@ -67,6 +90,76 @@ impl Packet {
             additions,
         };
         Ok(pkt)
+    }
+
+    /// Generate DNS failure response
+    pub fn new_failure(id: u16, rcode: PacketError) -> Packet {
+        let header = Header::new_failure(id, rcode);
+        Packet {
+            header,
+            questions: vec![],
+            answers: vec![],
+            authorities: vec![],
+            additions: vec![],
+        }
+    }
+
+    // Todo: support domain name compressing
+    /// make a binary
+    pub fn into_bytes(self) -> Bytes {
+        let mut buf = BytesMut::new();
+        let h = self.header.into_bytes().unwrap();
+        buf.put_slice(&h[..]);
+        for question in self.questions {
+            let q = question.into_bytes().unwrap();
+            buf.put_slice(&q[..]);
+        }
+        for answer in self.answers {
+            let a = answer.into_bytes().unwrap();
+            buf.put_slice(&a[..]);
+        }
+        for authority in self.authorities {
+            let a = authority.into_bytes().unwrap();
+            buf.put_slice(&a[..]);
+        }
+        for addition in self.additions {
+            let a = addition.into_bytes().unwrap();
+            buf.put_slice(&a[..]);
+        }
+
+        Bytes::from(buf)
+    }
+}
+
+impl Packet {
+    pub fn get_id(&self) -> u16 {
+        self.header.get_id()
+    }
+
+    pub fn is_query(&self) -> bool {
+        self.header.is_query()
+    }
+}
+
+impl Packet {
+    pub fn add_query(&mut self, query: Question) {
+        self.questions.push(query);
+        self.header.set_questions(self.header.question_count() + 1);
+    }
+
+    pub fn add_answer(&mut self, answer: RR) {
+        self.answers.push(answer);
+        self.header.set_answers(self.header.answer_count() + 1);
+    }
+
+    pub fn add_authority(&mut self, authority: RR) {
+        self.authorities.push(authority);
+        self.header.set_authorities(self.header.ns_count() + 1);
+    }
+
+    pub fn add_addition(&mut self, additional: RR) {
+        self.additions.push(additional);
+        self.header.set_additional(self.header.addition_count() + 1);
     }
 }
 

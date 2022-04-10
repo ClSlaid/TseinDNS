@@ -38,9 +38,72 @@ pub struct Header {
     /// number of Resource Records in answer section
     answers: u16,
     /// number of name server Resource Records in the authority records section
-    name_servers: u16,
+    authorities: u16,
     /// number of resource records in additional section
     additional: u16,
+}
+
+impl Header {
+    pub fn new_query(id: u16, questions: u16) -> Self {
+        Header {
+            id,
+            is_query: true,
+            opcode: Op::Query,
+            is_auth: false,
+            is_trunc: false,
+            is_rec_des: true,
+            is_rec_avl: false,
+            z: 0,
+            response: Rcode::NoError,
+            questions,
+            answers: 0,
+            authorities: 0,
+            additional: 0,
+        }
+    }
+
+    pub fn new_answer(id: u16, answers: u16, authorities: u16, additional: u16) -> Self {
+        Header {
+            id,
+            is_query: false,
+            opcode: Op::Query,
+            is_auth: false,
+            is_trunc: false,
+            is_rec_des: true,
+            is_rec_avl: true,
+            z: 0,
+            response: Rcode::NoError,
+            questions: 0,
+            answers,
+            authorities,
+            additional,
+        }
+    }
+
+    pub fn new_failure(id: u16, error: PacketError) -> Self {
+        let rcode = match error {
+            PacketError::FormatError => Rcode::FormatError,
+            PacketError::ServFail => Rcode::ServFail,
+            PacketError::NameError(_) => Rcode::NameError,
+            PacketError::NotImpl(_) => Rcode::NotImpl,
+            PacketError::Refused(_) => Rcode::Refused,
+        };
+        Header {
+            id,
+            is_query: false,
+            opcode: Op::Query,
+            is_auth: false,
+            is_trunc: false,
+            is_rec_des: false,
+            is_rec_avl: false,
+            z: 0,
+            response: rcode,
+            questions: 0,
+            answers: 0,
+            authorities: 0,
+            additional: 0,
+        }
+    }
 }
 
 impl Header {
@@ -100,12 +163,30 @@ impl Header {
 
     /// how many ns records are there in the packet
     pub fn ns_count(&self) -> u16 {
-        self.name_servers
+        self.authorities
     }
 
-    /// how many addtional RRs are in the packet
-    pub fn addtional_count(&self) -> u16 {
+    /// how many additional RRs are in the packet
+    pub fn addition_count(&self) -> u16 {
         self.additional
+    }
+}
+
+impl Header {
+    pub fn set_questions(&mut self, questions: u16) {
+        self.questions = questions;
+    }
+
+    pub fn set_answers(&mut self, answers: u16) {
+        self.answers = answers;
+    }
+
+    pub fn set_authorities(&mut self, authorities: u16) {
+        self.authorities = authorities;
+    }
+
+    pub fn set_additional(&mut self, additional: u16) {
+        self.additional = additional;
     }
 }
 
@@ -145,7 +226,7 @@ impl PacketContent for Header {
             response,
             questions,
             answers,
-            name_servers,
+            authorities: name_servers,
             additional,
         })
     }
@@ -170,7 +251,7 @@ impl PacketContent for Header {
         buf.put_u8(b);
         buf.put_u16(self.questions);
         buf.put_u16(self.answers);
-        buf.put_u16(self.name_servers);
+        buf.put_u16(self.authorities);
         buf.put_u16(self.additional);
         Ok(buf)
     }
@@ -253,6 +334,6 @@ mod test {
         assert_eq!(h.question_count(), 1);
         assert_eq!(h.answer_count(), 0);
         assert_eq!(h.ns_count(), 0);
-        assert_eq!(h.addtional_count(), 0);
+        assert_eq!(h.addition_count(), 0);
     }
 }

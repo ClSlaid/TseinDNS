@@ -32,6 +32,8 @@ use rdata::{a::A, aaaa::AAAA, cname::CNAME, mx::MX, ns::NS, soa::SOA, unknown::U
 /// /                                               /
 /// +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
 /// ```
+
+#[derive(Debug)]
 pub struct RR {
     domain: Name,
     ttl: u32,
@@ -45,6 +47,8 @@ pub struct RR {
 /// ## RRData
 /// The `RRData` section of `RR`.
 /// It also implicitly points out the `TYPE` of `RR`.
+
+#[derive(Debug)]
 pub enum RRData {
     A(A),
     AAAA(AAAA),

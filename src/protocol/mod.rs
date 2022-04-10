@@ -1,4 +1,7 @@
+use std::fmt::Display;
+
 use bytes::{BufMut, Bytes, BytesMut};
+use tracing::instrument;
 
 pub use self::{domain::Name, error::PacketError, header::Header, question::Question, rr::RR};
 
@@ -43,32 +46,33 @@ impl Packet {
             additions: vec![],
         }
     }
+
     // assuming the packet buffer contains at least 1 packet...
     pub fn parse_packet(packet: Bytes, offset: usize) -> Result<Packet, PacketError> {
+        tracing::trace!(
+            "parse packet at offset {}, packet size: {}",
+            offset,
+            packet.len()
+        );
+
         let h = Header::parse(packet.clone(), offset)?;
+        tracing::trace!("parse header successful with header {:?}", h);
         let (mut questions, mut answers) = (vec![], vec![]);
         let mut offset = offset + 12;
 
-        if h.is_query() {
-            if h.answer_count() != 0 {
-                // no answer is expected in query packet.
-                return Err(PacketError::FormatError);
-            }
-            for _ in 0..h.question_count() {
-                let ques = Question::parse(packet.clone(), offset)?;
-                offset += ques.size();
-                questions.push(ques);
-            }
-        } else {
-            if h.question_count() != 0 {
-                // no query is expected in answer packet.
-                return Err(PacketError::FormatError);
-            }
-            for _ in 0..h.answer_count() {
-                let rr = RR::parse(packet.clone(), offset)?;
-                offset += rr.size();
-                answers.push(rr);
-            }
+        if h.is_query() && h.answer_count() != 0 {
+            // no answer is expected in query packet.
+            return Err(PacketError::FormatError);
+        }
+        for _ in 0..h.question_count() {
+            let ques = Question::parse(packet.clone(), offset)?;
+            offset += ques.size();
+            questions.push(ques);
+        }
+        for _ in 0..h.answer_count() {
+            let rr = RR::parse(packet.clone(), offset)?;
+            offset += rr.size();
+            answers.push(rr);
         }
         let mut authorities = Vec::new();
         for _ in 0..h.ns_count() {

@@ -9,6 +9,7 @@ use tokio::sync::mpsc;
 use tokio::sync::Mutex;
 use tokio::time::timeout;
 use tokio::{net::UdpSocket, sync::OnceCell};
+use tracing;
 
 use crate::protocol::{Packet, PacketError, Question, RR};
 
@@ -50,7 +51,7 @@ impl Manager {
     }
 
     pub async fn run_forward(
-        &'static self,
+        self: Arc<Self>,
         mut recur_receiver: mpsc::Receiver<Task>,
     ) -> Result<(), std::io::Error> {
         let mp: Arc<Mutex<BTreeMap<u16, mpsc::Sender<Vec<Answer>>>>> =
@@ -59,12 +60,19 @@ impl Manager {
         let mp_listener = mp.clone();
         let (buf_sender, mut buf_receiver) = mpsc::channel::<Bytes>(4);
 
+        let s = self.clone();
+        tracing::debug!("setting up listener");
         let listening = tokio::spawn(async move {
             // this handle will receive packet from upstream and push them into map
-            let mut buf = BytesMut::new();
-            while let Ok(sz) = self.forward.clone().recv(&mut buf).await {
+            let mut buf = BytesMut::from(&[0_u8; 1024][..]);
+            while let Ok(sz) = s.forward.clone().recv(&mut buf).await {
                 if sz < 20 {
                     // malformed packet
+                    tracing::debug!(
+                        "received malformed packet from upstream, length {}, data: {:?}",
+                        sz,
+                        buf
+                    );
                     continue;
                 }
                 let rs = Packet::parse_packet(buf.clone().into(), 0);
@@ -90,7 +98,8 @@ impl Manager {
                             sender.send(answers).await.unwrap();
                         }
                     }
-                    Err(_e) => {
+                    Err(e) => {
+                        tracing::debug!("received failure from upstream: {}", e);
                         // maybe malformed packet or corrupted data
                         // ignore it
                         // if there is a task that corresponds to the packet
@@ -195,38 +204,50 @@ impl Manager {
     }
 
     pub async fn run_udp(
-        &'static self,
+        self: Arc<Self>,
         task_sender: mpsc::Sender<Task>,
     ) -> Result<(), std::io::Error> {
+        let s = self.clone();
         loop {
             // receive packet
-            let mut packet = BytesMut::new();
-            let (n, client) = self.udp.recv_from(&mut packet).await?;
+            let mut packet = BytesMut::from(&[0_u8; 1024][..]);
+            let (n, client) = s.udp.recv_from(&mut packet).await?;
 
             // validate packet
             if n < 12 {
+                tracing::debug!("received malformed packet from {}", client);
+                tracing::trace!("packet length: {}, data: {:?}", n, packet);
                 // ignore
                 continue;
             }
+
             let pkt = match Packet::parse_packet(packet.clone().into(), 0) {
                 Ok(pkt) => pkt,
                 Err(err) => {
+                    let s = s.clone();
                     tokio::spawn(async move {
+                        tracing::debug!(
+                            "received malformed packet from {} with failure {}",
+                            client,
+                            err
+                        );
                         let id = ((packet[0] as u16) << 8) | (packet[1] as u16);
-                        self.udp_fail(id, err, client).await;
+                        s.udp_fail(id, err, client).await;
                     });
                     continue;
                 }
             };
+            tracing::debug!("received packet from client: {}", client);
 
             let task_sender = task_sender.clone();
 
             // spawn a new task to proceed the packet
+            let s = s.clone();
             tokio::spawn(async move {
                 let id = pkt.get_id();
-                let rs = self.transaction(pkt, task_sender).await;
+                let rs = s.transaction(pkt, task_sender).await;
                 if rs.is_err() {
-                    self.udp_fail(id, rs.unwrap_err(), client).await;
+                    s.udp_fail(id, rs.unwrap_err(), client).await;
                     return;
                 }
                 let answers = rs.unwrap();
@@ -242,7 +263,7 @@ impl Manager {
                     }
                 }
                 let packet = resp.into_bytes();
-                let udp = self.udp.clone();
+                let udp = s.udp.clone();
                 udp.send_to(&packet, client).await.unwrap();
             });
         }

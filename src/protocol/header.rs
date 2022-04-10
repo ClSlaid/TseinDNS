@@ -14,6 +14,7 @@ const Z_MASK: u8 = 0x70;
 const RC_MASK: u8 = 0x0f;
 
 /// DNS Header described in [RFC1035](https://datatracker.ietf.org/doc/html/rfc1035)
+#[derive(Debug, Clone, Copy)]
 pub struct Header {
     /// transaction ID of the DNS packet
     id: u16,

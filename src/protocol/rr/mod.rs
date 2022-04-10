@@ -118,7 +118,7 @@ impl PacketContent for RR {
         let ty = RRType::from(p.get_u16());
         let class = RRClass::from(p.get_u16());
         let ttl = p.get_u32();
-        let rdata_begin = name_end + 6;
+        let rdata_begin = name_end + 8;
         let (rdata, rdata_end) = rdata_parse(ty, packet, rdata_begin)?;
         let size = rdata_end - pos;
         Ok(Self {

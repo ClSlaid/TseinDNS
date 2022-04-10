@@ -23,7 +23,7 @@ async fn get_time_out() -> Duration {
 
 #[derive(Debug)]
 pub enum Task {
-    Query(Question, mpsc::Sender<Answer>),
+    Query(Question, mpsc::UnboundedSender<Answer>),
 }
 
 #[derive(Debug)]
@@ -52,7 +52,7 @@ impl Manager {
 
     pub async fn run_forward(
         self: Arc<Self>,
-        mut recur_receiver: mpsc::Receiver<Task>,
+        mut recur_receiver: mpsc::UnboundedReceiver<Task>,
     ) -> Result<(), std::io::Error> {
         let mp: Arc<Mutex<BTreeMap<u16, mpsc::Sender<Vec<Answer>>>>> =
             Arc::new(Mutex::new(BTreeMap::new()));
@@ -144,7 +144,6 @@ impl Manager {
                     // timeout
                     answer_sender
                         .send(Answer::Error(PacketError::ServFail))
-                        .await
                         .unwrap();
                     return;
                 }
@@ -153,13 +152,12 @@ impl Manager {
                     // sender closed unexpectedly
                     answer_sender
                         .send(Answer::Error(PacketError::ServFail))
-                        .await
                         .unwrap();
                     return;
                 }
                 let answers = answers.unwrap();
                 for answer in answers.into_iter() {
-                    answer_sender.send(answer).await.unwrap();
+                    answer_sender.send(answer).unwrap();
                 }
             });
             checkers.push(checker);
@@ -172,7 +170,7 @@ impl Manager {
     async fn transaction(
         &self,
         pkt: Packet,
-        task_sender: mpsc::Sender<Task>,
+        task_sender: mpsc::UnboundedSender<Task>,
     ) -> Result<Vec<Answer>, PacketError> {
         if !pkt.is_query() {
             return Err(PacketError::ServFail);
@@ -180,10 +178,10 @@ impl Manager {
 
         let mut rxs = vec![];
         for query in pkt.questions {
-            let (a_sender, a_recv) = mpsc::channel::<Answer>(1);
+            let (a_sender, a_recv) = mpsc::unbounded_channel::<Answer>();
             let task = Task::Query(query, a_sender);
             rxs.push(a_recv);
-            task_sender.send(task).await.unwrap();
+            task_sender.send(task).unwrap();
         }
         let mut answers = vec![];
         for rx in rxs.iter_mut() {
@@ -205,7 +203,7 @@ impl Manager {
 
     pub async fn run_udp(
         self: Arc<Self>,
-        task_sender: mpsc::Sender<Task>,
+        task_sender: mpsc::UnboundedSender<Task>,
     ) -> Result<(), std::io::Error> {
         let s = self.clone();
         loop {

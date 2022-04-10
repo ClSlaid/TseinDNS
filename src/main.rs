@@ -34,8 +34,8 @@ async fn main() {
 
     let server = Arc::new(Manager::new(serve, forward));
     let forwarder = server.clone();
-    let (task_sender, mut task_recv) = mpsc::channel(1);
-    let (rec_sender, rec_recv) = mpsc::channel(1);
+    let (task_sender, mut task_recv) = mpsc::unbounded_channel();
+    let (rec_sender, rec_recv) = mpsc::unbounded_channel();
 
     tracing::info!("init forwarding...");
     let forwarding = tokio::spawn(async move {
@@ -54,7 +54,7 @@ async fn main() {
         tracing::info!("initiated transaction layer");
         while let Some(task) = task_recv.recv().await {
             tracing::debug!("received task");
-            let rec_sender: mpsc::Sender<Task> = rec_sender.clone();
+            let rec_sender = rec_sender.clone();
             match task {
                 Task::Query(query, ans_sender) => {
                     // TODO: caching
@@ -62,14 +62,13 @@ async fn main() {
                         "unable to lookup query locally: {}, forwarding...",
                         query.get_name()
                     );
-                    let (rec_query_sender, mut rec_ans_recv) = mpsc::channel(1);
+                    let (rec_query_sender, mut rec_ans_recv) = mpsc::unbounded_channel();
                     rec_sender
                         .send(Task::Query(query, rec_query_sender))
-                        .await
                         .unwrap();
                     while let Some(answer) = rec_ans_recv.recv().await {
                         // TODO: caching
-                        ans_sender.send(answer).await.unwrap();
+                        ans_sender.send(answer).unwrap();
                     }
                 }
             };

@@ -54,6 +54,11 @@ impl Name {
         self.len() == 0
     }
 
+    /// parse `domain` from raw packet bytes
+    ///
+    /// If ok, return the Domain name and the end position of domain name in packet.
+    ///
+    /// If err, return `PacketError::FormatError`
     pub fn parse(packet: Bytes, pos: usize) -> Result<(Self, usize), PacketError>
     where
         Self: Sized,

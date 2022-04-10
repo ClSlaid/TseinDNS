@@ -227,6 +227,21 @@ pub_map_enum! {RRType<u16> {
     UNKNOWN
 }}
 
+impl Display for RRType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            RRType::A => String::from("A"),
+            RRType::NS => String::from("NS"),
+            RRType::CNAME => String::from("CNAME"),
+            RRType::SOA => String::from("SOA"),
+            RRType::MX => String::from("MX"),
+            RRType::AAAA => String::from("AAAA"),
+            RRType::UNKNOWN(val) => format!("UNKNOWN({})", val),
+        };
+        write!(f, "{}", s)
+    }
+}
+
 // QClass
 pub_map_enum! {RRClass<u16> {
     Reserved => 0,

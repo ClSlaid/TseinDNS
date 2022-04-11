@@ -1,7 +1,6 @@
 use std::fmt::Display;
 
 use bytes::{BufMut, Bytes, BytesMut};
-use tracing::instrument;
 
 pub use self::{domain::Name, error::PacketError, header::Header, question::Question, rr::RR};
 
@@ -220,11 +219,11 @@ macro_rules! pub_map_enum {
 // Type of Resource Record
 pub_map_enum! {RRType<u16> {
     A => 1,
-    NS => 2,
-    CNAME => 5,
-    SOA => 6,
-    MX => 15,
-    AAAA => 28;
+    Ns => 2,
+    Cname => 5,
+    Soa => 6,
+    Mx => 15,
+    Aaaa => 28;
     UNKNOWN
 }}
 
@@ -232,11 +231,11 @@ impl Display for RRType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let s = match self {
             RRType::A => String::from("A"),
-            RRType::NS => String::from("NS"),
-            RRType::CNAME => String::from("CNAME"),
-            RRType::SOA => String::from("SOA"),
-            RRType::MX => String::from("MX"),
-            RRType::AAAA => String::from("AAAA"),
+            RRType::Ns => String::from("NS"),
+            RRType::Cname => String::from("CNAME"),
+            RRType::Soa => String::from("SOA"),
+            RRType::Mx => String::from("MX"),
+            RRType::Aaaa => String::from("AAAA"),
             RRType::UNKNOWN(val) => format!("UNKNOWN({})", val),
         };
         write!(f, "{}", s)
@@ -255,15 +254,15 @@ pub_map_enum! {RRClass<u16> {
 // testing macron is enough
 #[test]
 fn test_pub_map_enum() {
-    pub_map_enum! {Foo<i32>{
-        MyFoo => 0,
-        MyBar => 1;
+    pub_map_enum! {Test<i32>{
+        MyF => 0,
+        MyB => 1;
         Unknown
     }}
-    let my_foo = Foo::from(0);
-    assert_eq!(my_foo, Foo::MyFoo);
-    let unknown = Foo::from(114514);
-    assert_eq!(unknown, Foo::Unknown(114514));
+    let my_foo = Test::from(0);
+    assert_eq!(my_foo, Test::MyF);
+    let unknown = Test::from(114514);
+    assert_eq!(unknown, Test::Unknown(114514));
     assert_eq!(i32::from(my_foo), 0);
     assert_eq!(i32::from(unknown), 114514);
 }

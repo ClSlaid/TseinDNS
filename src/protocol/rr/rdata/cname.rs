@@ -6,11 +6,11 @@ use super::{try_into_rdata_length, Name, Rdata};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct CNAME {
+pub struct Cname {
     domain: Name,
 }
 
-impl Rdata for CNAME {
+impl Rdata for Cname {
     fn parse(packet: Bytes, pos: usize) -> Result<(Self, usize), PacketError>
     where
         Self: Sized,
@@ -46,19 +46,19 @@ impl Rdata for CNAME {
     }
 }
 
-impl From<Name> for CNAME {
+impl From<Name> for Cname {
     fn from(name: Name) -> Self {
         Self { domain: name }
     }
 }
 
-impl From<CNAME> for Name {
-    fn from(cname: CNAME) -> Self {
+impl From<Cname> for Name {
+    fn from(cname: Cname) -> Self {
         cname.domain
     }
 }
 
-impl Display for CNAME {
+impl Display for Cname {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.domain)
     }
@@ -68,14 +68,14 @@ impl Display for CNAME {
 fn test_parse() {
     // test invalid
     let invalid = Bytes::from(b"\x00\x0f\x07example\x03com\x00".to_vec());
-    let parsed = CNAME::parse(invalid, 0);
+    let parsed = Cname::parse(invalid, 0);
     assert!(parsed.is_err());
 
     let rdata = Bytes::from(b"\x00\x0d\x07example\x03com\x00".to_vec());
-    let parsed = CNAME::parse(rdata.clone(), 0);
+    let parsed = Cname::parse(rdata.clone(), 0);
     assert!(parsed.is_ok());
     let (cname, end) = parsed.unwrap();
-    let target = CNAME::from(Name::try_from("example.com").unwrap());
+    let target = Cname::from(Name::try_from("example.com").unwrap());
     assert_eq!(end, rdata.len());
     assert_eq!(cname, target);
 }
@@ -83,7 +83,7 @@ fn test_parse() {
 #[test]
 fn test_to_bytes() {
     let rdata = Bytes::from(b"\x00\x0d\x07example\x03com\x00".to_vec());
-    let cname = CNAME::from(Name::try_from("example.com").unwrap());
+    let cname = Cname::from(Name::try_from("example.com").unwrap());
     let bytes = cname.try_into_bytes();
     assert!(bytes.is_ok());
     let bytes = bytes.unwrap();

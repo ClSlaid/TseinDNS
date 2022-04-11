@@ -1,11 +1,10 @@
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
 mod rdata;
-use self::rdata::Rdata;
 
 use super::{domain::Name, error::PacketError, RRClass};
 use crate::protocol::{PacketContent, RRType};
-use rdata::{a::A, aaaa::AAAA, cname::CNAME, mx::MX, ns::NS, soa::SOA, unknown::UNKNOWN};
+use rdata::{a::A, aaaa::Aaaa, cname::Cname, mx::Mx, ns::Ns, soa::Soa, unknown::Unknown, Rdata};
 
 /// ## Resource Record
 /// As is described in RFC1035,
@@ -40,7 +39,7 @@ pub struct RR {
     ty: RRType,
     class: RRClass,
     size: usize, // total length of RR in packet
-    rdata: RRData,
+    r_data: RRData,
 }
 
 // TODO: replace redundant code with macron
@@ -51,34 +50,34 @@ pub struct RR {
 #[derive(Debug)]
 pub enum RRData {
     A(A),
-    AAAA(AAAA),
-    CNAME(CNAME),
-    MX(MX),
-    NS(NS),
-    SOA(SOA),
-    UNKNOWN(UNKNOWN),
+    Aaaa(Aaaa),
+    Cname(Cname),
+    Mx(Mx),
+    Ns(Ns),
+    Soa(Soa),
+    Unknown(Unknown),
 }
 impl RRData {
     pub fn get_type(&self) -> RRType {
         match self {
             Self::A(_) => RRType::A,
-            Self::AAAA(_) => RRType::AAAA,
-            Self::CNAME(_) => RRType::CNAME,
-            Self::MX(_) => RRType::MX,
-            Self::NS(_) => RRType::NS,
-            Self::SOA(_) => RRType::SOA,
-            Self::UNKNOWN(unknown) => unknown.get_type(),
+            Self::Aaaa(_) => RRType::Aaaa,
+            Self::Cname(_) => RRType::Cname,
+            Self::Mx(_) => RRType::Mx,
+            Self::Ns(_) => RRType::Ns,
+            Self::Soa(_) => RRType::Soa,
+            Self::Unknown(unknown) => unknown.get_type(),
         }
     }
-    pub fn to_bytes(self) -> Result<BytesMut, PacketError> {
+    pub fn try_into_bytes(self) -> Result<BytesMut, PacketError> {
         match self {
             Self::A(a) => a.try_into_bytes(),
-            Self::AAAA(aaaa) => aaaa.try_into_bytes(),
-            Self::CNAME(cname) => cname.try_into_bytes(),
-            Self::MX(mx) => mx.try_into_bytes(),
-            Self::NS(ns) => ns.try_into_bytes(),
-            Self::SOA(soa) => soa.try_into_bytes(),
-            Self::UNKNOWN(unknown) => unknown.try_into_bytes(),
+            Self::Aaaa(aaaa) => aaaa.try_into_bytes(),
+            Self::Cname(cname) => cname.try_into_bytes(),
+            Self::Mx(mx) => mx.try_into_bytes(),
+            Self::Ns(ns) => ns.try_into_bytes(),
+            Self::Soa(soa) => soa.try_into_bytes(),
+            Self::Unknown(unknown) => unknown.try_into_bytes(),
         }
     }
 }
@@ -94,16 +93,16 @@ macro_rules! parse_rdata {
             }
         )*
             RRType::UNKNOWN(x) => {
-                let (mut unknown, end) = UNKNOWN::parse_typeless($packet, $begin)?;
+                let (mut unknown, end) = Unknown::parse_typeless($packet, $begin)?;
                 unknown.set_type(x);
-                (RRData::UNKNOWN(unknown), end)
+                (RRData::Unknown(unknown), end)
             }
     }
     }
 }
 
 fn rdata_parse(ty: RRType, packet: Bytes, offset: usize) -> Result<(RRData, usize), PacketError> {
-    let (rdata, end) = parse_rdata!(ty, packet, offset, A, AAAA, NS, CNAME, SOA, MX);
+    let (rdata, end) = parse_rdata!(ty, packet, offset, A, Aaaa, Ns, Cname, Soa, Mx);
     Ok((rdata, end))
 }
 
@@ -127,7 +126,7 @@ impl PacketContent for RR {
             class,
             ttl,
             size,
-            rdata,
+            r_data: rdata,
         })
     }
 
@@ -142,7 +141,7 @@ impl PacketContent for RR {
         buf.put_u16(self.ty.into());
         buf.put_u16(self.class.into());
         buf.put_u32(self.ttl);
-        let rdata = self.rdata.to_bytes()?;
+        let rdata = self.r_data.try_into_bytes()?;
         buf.put_slice(&rdata[..]);
         Ok(buf)
     }

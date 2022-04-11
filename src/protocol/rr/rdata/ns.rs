@@ -7,11 +7,11 @@ use crate::protocol::{domain::Name, error::PacketError};
 use super::{try_into_rdata_length, Rdata};
 
 #[derive(PartialEq, Debug, Clone)]
-pub struct NS {
+pub struct Ns {
     domain: Name,
 }
 
-impl Rdata for NS {
+impl Rdata for Ns {
     fn parse(packet: bytes::Bytes, pos: usize) -> Result<(Self, usize), PacketError>
     where
         Self: Sized,
@@ -25,7 +25,7 @@ impl Rdata for NS {
         let end = pos + length;
 
         let (domain, domain_end) = Name::parse(packet, pos)?;
-        let ns = NS { domain };
+        let ns = Ns { domain };
         if domain_end == end {
             Ok((ns, end))
         } else {
@@ -43,19 +43,19 @@ impl Rdata for NS {
     }
 }
 
-impl From<Name> for NS {
+impl From<Name> for Ns {
     fn from(n: Name) -> Self {
         Self { domain: n }
     }
 }
 
-impl From<NS> for Name {
-    fn from(ns: NS) -> Self {
+impl From<Ns> for Name {
+    fn from(ns: Ns) -> Self {
         ns.domain
     }
 }
 
-impl Display for NS {
+impl Display for Ns {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.domain)
     }
@@ -63,20 +63,20 @@ impl Display for NS {
 
 #[cfg(test)]
 mod ns_tests {
-    use super::{Name, Rdata, NS};
+    use super::{Name, Ns, Rdata};
     use bytes::Bytes;
     #[test]
     fn test_parse() {
         // test invalid
         let invalid = Bytes::from(b"\x00\x0f\x07example\x03com\x00".to_vec());
-        let parsed = NS::parse(invalid, 0);
+        let parsed = Ns::parse(invalid, 0);
         assert!(parsed.is_err());
 
         let rdata = Bytes::from(b"\x00\x0d\x07example\x03com\x00".to_vec());
-        let parsed = NS::parse(rdata.clone(), 0);
+        let parsed = Ns::parse(rdata.clone(), 0);
         assert!(parsed.is_ok());
         let (ns, end) = parsed.unwrap();
-        let target = NS::from(Name::try_from("example.com").unwrap());
+        let target = Ns::from(Name::try_from("example.com").unwrap());
         assert_eq!(end, rdata.len());
         assert_eq!(ns, target);
     }
@@ -84,7 +84,7 @@ mod ns_tests {
     #[test]
     fn test_to_bytes() {
         let rdata = Bytes::from(b"\x00\x0d\x07example\x03com\x00".to_vec());
-        let ns = NS::from(Name::try_from("example.com").unwrap());
+        let ns = Ns::from(Name::try_from("example.com").unwrap());
         let bytes = ns.try_into_bytes();
         assert!(bytes.is_ok());
         let bytes = bytes.unwrap();

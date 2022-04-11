@@ -5,7 +5,7 @@ use crate::protocol::{domain::Name, error::PacketError};
 use super::{try_into_rdata_length, Rdata};
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct SOA {
+pub struct Soa {
     mname: Name,
     rname: Name,
     serial: u32,
@@ -15,7 +15,7 @@ pub struct SOA {
     minimum: u32,
 }
 
-impl Rdata for SOA {
+impl Rdata for Soa {
     fn parse(packet: Bytes, pos: usize) -> Result<(Self, usize), PacketError> {
         let packet_len = packet.len();
         if pos + (2 + 2 * 2 + 4 * 5) > packet_len {
@@ -42,7 +42,7 @@ impl Rdata for SOA {
         let expires = p.get_u32();
         let minimum = p.get_u32();
 
-        let soa = SOA {
+        let soa = Soa {
             mname,
             rname,
             serial,
@@ -95,10 +95,10 @@ fn test_parse_and_to_bytes() {
     invalid.put_slice(&rname[..]);
     let invalid = Bytes::from(invalid);
 
-    let parsed = SOA::parse(invalid, 0);
+    let parsed = Soa::parse(invalid, 0);
     assert!(parsed.is_err());
 
-    let target = SOA {
+    let target = Soa {
         mname: Name::try_from("alpha.com").unwrap(),
         rname: Name::try_from("bravo.com").unwrap(),
         serial,
@@ -122,7 +122,7 @@ fn test_parse_and_to_bytes() {
     let buf = Bytes::from(buf);
     let len = buf.len();
 
-    let parsed = SOA::parse(buf.clone(), 0);
+    let parsed = Soa::parse(buf.clone(), 0);
     assert!(parsed.is_ok());
     let (soa, end) = parsed.unwrap();
     assert_eq!(end, len);

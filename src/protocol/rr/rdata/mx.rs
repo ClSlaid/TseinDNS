@@ -4,12 +4,12 @@ use super::{try_into_rdata_length, Name, Rdata};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
 #[derive(Debug)]
-pub struct MX {
+pub struct Mx {
     preference: u16,
     domain: Name,
 }
 
-impl MX {
+impl Mx {
     pub fn get_preference(&self) -> u16 {
         self.preference
     }
@@ -18,7 +18,7 @@ impl MX {
     }
 }
 
-impl Rdata for MX {
+impl Rdata for Mx {
     fn parse(packet: Bytes, pos: usize) -> Result<(Self, usize), PacketError> {
         if pos + (2 + 2 + 2) > packet.len() {
             return Err(PacketError::FormatError);
@@ -35,7 +35,7 @@ impl Rdata for MX {
         let pos = pos + 4;
 
         let (domain, domain_end) = Name::parse(packet.clone(), pos)?;
-        let mx = MX { preference, domain };
+        let mx = Mx { preference, domain };
         if domain_end == end {
             Ok((mx, end))
         } else {
@@ -60,11 +60,11 @@ impl Rdata for MX {
 fn test_parse() {
     // test invalid
     let invalid = Bytes::from(b"\x00\x08\x00\x0a\x07example\x03com\x00".to_vec());
-    let parsed = MX::parse(invalid, 0);
+    let parsed = Mx::parse(invalid, 0);
     assert!(parsed.is_err());
 
     let target = Bytes::from(b"\x00\x0f\x00\x0a\x07example\x03com\x00".to_vec());
-    let parsed = MX::parse(target.clone(), 0);
+    let parsed = Mx::parse(target.clone(), 0);
     assert!(parsed.is_ok());
     let (mx, end) = parsed.unwrap();
     assert_eq!(end, target.len());
@@ -75,7 +75,7 @@ fn test_parse() {
 #[test]
 fn test_to_bytes() {
     let target = Bytes::from(b"\x00\x0f\x00\x0a\x07example\x03com\x00".to_vec());
-    let mx = MX {
+    let mx = Mx {
         preference: 10,
         domain: Name::try_from("example.com").unwrap(),
     };

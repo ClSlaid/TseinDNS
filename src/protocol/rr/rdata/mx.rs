@@ -43,7 +43,7 @@ impl Rdata for MX {
         }
     }
 
-    fn to_bytes(&self) -> Result<BytesMut, PacketError> {
+    fn try_into_bytes(&self) -> Result<BytesMut, PacketError> {
         let v = self.domain.as_bytes_uncompressed();
         let mut buf = BytesMut::with_capacity(v.len() + 4);
         let rdlength = try_into_rdata_length(v.len())?;
@@ -79,7 +79,7 @@ fn test_to_bytes() {
         preference: 10,
         domain: Name::try_from("example.com").unwrap(),
     };
-    let bytes = mx.to_bytes();
+    let bytes = mx.try_into_bytes();
     assert!(bytes.is_ok());
     let bytes = bytes.unwrap();
     assert_eq!(bytes[..], target[..]);

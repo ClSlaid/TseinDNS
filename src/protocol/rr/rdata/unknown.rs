@@ -74,7 +74,7 @@ impl Rdata for UNKNOWN {
         Ok((unknown, end))
     }
 
-    fn to_bytes(&self) -> Result<BytesMut, PacketError> {
+    fn try_into_bytes(&self) -> Result<BytesMut, PacketError> {
         let mut buf = BytesMut::with_capacity(self.length + 2);
         buf.put_u16(self.length as u16);
         buf.put_slice(&self.data);
@@ -113,7 +113,7 @@ fn test_parse_and_to_bytes() {
     let parsed = UNKNOWN::parse_typeless(data.clone(), 0);
     let (unknown, end) = parsed.unwrap();
     assert_eq!(end, data.len());
-    assert_eq!(unknown.to_bytes().unwrap()[..], data[..]);
+    assert_eq!(unknown.try_into_bytes().unwrap()[..], data[..]);
     // test parse()
     let full_data = Bytes::from(
         [
@@ -127,5 +127,5 @@ fn test_parse_and_to_bytes() {
     let (unknown, end) = parsed.unwrap();
     assert_eq!(end, full_data.len());
     assert_eq!(unknown.get_type(), RRType::from(233));
-    assert_eq!(unknown.to_bytes().unwrap()[..], data[..]);
+    assert_eq!(unknown.try_into_bytes().unwrap()[..], data[..]);
 }

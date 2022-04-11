@@ -61,7 +61,7 @@ impl Rdata for SOA {
         }
     }
 
-    fn to_bytes(&self) -> Result<BytesMut, PacketError> {
+    fn try_into_bytes(&self) -> Result<BytesMut, PacketError> {
         let mname = self.mname.as_bytes_uncompressed();
         let rname = self.rname.as_bytes_uncompressed();
         let length = mname.len() + rname.len() + 4 * 5;
@@ -128,7 +128,7 @@ fn test_parse_and_to_bytes() {
     assert_eq!(end, len);
     assert_eq!(soa, target);
 
-    let bytes = soa.to_bytes();
+    let bytes = soa.try_into_bytes();
     assert!(bytes.is_ok());
     let bytes = bytes.unwrap();
     assert_eq!(bytes[..], buf[..]);

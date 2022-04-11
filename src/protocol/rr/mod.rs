@@ -72,13 +72,13 @@ impl RRData {
     }
     pub fn to_bytes(self) -> Result<BytesMut, PacketError> {
         match self {
-            Self::A(a) => a.to_bytes(),
-            Self::AAAA(aaaa) => aaaa.to_bytes(),
-            Self::CNAME(cname) => cname.to_bytes(),
-            Self::MX(mx) => mx.to_bytes(),
-            Self::NS(ns) => ns.to_bytes(),
-            Self::SOA(soa) => soa.to_bytes(),
-            Self::UNKNOWN(unknown) => unknown.to_bytes(),
+            Self::A(a) => a.try_into_bytes(),
+            Self::AAAA(aaaa) => aaaa.try_into_bytes(),
+            Self::CNAME(cname) => cname.try_into_bytes(),
+            Self::MX(mx) => mx.try_into_bytes(),
+            Self::NS(ns) => ns.try_into_bytes(),
+            Self::SOA(soa) => soa.try_into_bytes(),
+            Self::UNKNOWN(unknown) => unknown.try_into_bytes(),
         }
     }
 }

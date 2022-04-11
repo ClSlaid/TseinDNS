@@ -63,17 +63,25 @@ async fn main() {
                         query.get_name()
                     );
                     let (rec_query_sender, mut rec_ans_recv) = mpsc::unbounded_channel();
-                    rec_sender
-                        .send(Task::Query(query, rec_query_sender))
-                        .unwrap();
-                    while let Some(answer) = rec_ans_recv.recv().await {
-                        // TODO: caching
-                        ans_sender.send(answer).unwrap();
-                    }
+
+                    tokio::spawn(async move {
+                        rec_sender
+                            .send(Task::Query(query, rec_query_sender))
+                            .unwrap();
+                        while let Some(answer) = rec_ans_recv.recv().await {
+                            tracing::trace!("Get answer from upstream: {:?}", answer);
+                            // TODO: caching
+                            ans_sender.send(answer).unwrap();
+                        }
+                    });
                 }
             };
         }
     });
-    let v = tokio::join!(forwarding, serving, transaction);
+
+    let (f, s, t) = tokio::join!(forwarding, serving, transaction);
+    f.unwrap().unwrap();
+    s.unwrap().unwrap();
+    t.unwrap();
     tracing::info!("quit service");
 }

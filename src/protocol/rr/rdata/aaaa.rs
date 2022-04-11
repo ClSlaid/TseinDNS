@@ -33,7 +33,7 @@ impl Rdata for AAAA {
         }
     }
 
-    fn to_bytes(&self) -> Result<BytesMut, PacketError> {
+    fn try_into_bytes(&self) -> Result<BytesMut, PacketError> {
         let mut buf = BytesMut::with_capacity(18);
         buf.put_u16(16); // write RDLENGTH
         buf.put_u128(self.addr);
@@ -89,7 +89,7 @@ fn test_to_bytes() {
         .parse::<Ipv6Addr>()
         .unwrap();
     let aaaa = AAAA::from(addr);
-    let bytes = aaaa.to_bytes();
+    let bytes = aaaa.try_into_bytes();
     assert!(bytes.is_ok());
     let bytes = bytes.unwrap();
     let rdata = [0_u8, 16, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1];

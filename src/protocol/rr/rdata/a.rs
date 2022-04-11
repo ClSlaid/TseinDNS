@@ -33,7 +33,7 @@ impl Rdata for A {
         }
     }
 
-    fn to_bytes(&self) -> Result<BytesMut, PacketError> {
+    fn try_into_bytes(&self) -> Result<BytesMut, PacketError> {
         let mut buf = BytesMut::with_capacity(2 + 4);
         buf.put_u16(4); // write RDLENGTH
         buf.put_u32(self.addr);
@@ -80,7 +80,7 @@ fn test_parse() {
 fn test_to_bytes() {
     let rdata = Bytes::from(vec![0_u8, 4, 191, 9, 8, 10]);
     let a = A::from("191.9.8.10".parse::<Ipv4Addr>().unwrap());
-    let result = a.to_bytes();
+    let result = a.try_into_bytes();
     assert!(result.is_ok());
     let bytes = result.unwrap();
     assert_eq!(bytes[..], rdata[..]);

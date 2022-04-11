@@ -75,13 +75,13 @@ impl Packet {
             answers.push(rr);
         }
         let mut authorities = Vec::new();
-        for _ in 0..h.ns_count() {
+        for _ in 0..h.authority_count() {
             let rr = RR::parse(packet.clone(), offset)?;
             offset += rr.size();
             authorities.push(rr);
         }
         let mut additions = Vec::new();
-        for _ in 0..h.ns_count() {
+        for _ in 0..h.addition_count() {
             let rr = RR::parse(packet.clone(), offset)?;
             offset += rr.size();
             additions.push(rr);
@@ -158,7 +158,8 @@ impl Packet {
 
     pub fn add_authority(&mut self, authority: RR) {
         self.authorities.push(authority);
-        self.header.set_authorities(self.header.ns_count() + 1);
+        self.header
+            .set_authorities(self.header.authority_count() + 1);
     }
 
     pub fn add_addition(&mut self, additional: RR) {

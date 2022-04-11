@@ -1,4 +1,4 @@
-use std::fmt::{Debug, Display};
+use std::fmt::{Debug, Display, Write};
 
 use bytes::{BufMut, Bytes, BytesMut};
 use color_eyre::{eyre::eyre, Result};
@@ -21,7 +21,6 @@ type Label = String;
 #[derive(Clone)]
 pub struct Name {
     labels: Vec<Label>,
-    len: usize,
 }
 
 impl Name {
@@ -37,17 +36,22 @@ impl Name {
             labels.push(label);
             total_len += len + 1;
         }
-        Ok(Self {
-            labels,
-            len: total_len,
-        })
+        if total_len > MAX_NAME_LENGTH {
+            Err(eyre!("Label too long"))
+        } else {
+            Ok(Self { labels })
+        }
     }
 
     /// length of domain name string
     ///
     /// For example, `"example.com.".len()` is 12
     pub fn len(&self) -> usize {
-        self.len
+        if self.labels.is_empty() {
+            1
+        } else {
+            self.labels.len() + self.labels.iter().fold(0, |acc, label| acc + label.len())
+        }
     }
 
     pub fn is_empty(&self) -> bool {
@@ -72,6 +76,11 @@ impl Name {
 
         let mut labels = vec![];
         let mut size = 0;
+
+        // empty domain
+        if packet[pos] == 0 {
+            return Ok((Self { labels: vec![] }, pos + 1));
+        }
 
         loop {
             if jumps > MAX_JUMPS || pos >= packet.len() {
@@ -130,7 +139,7 @@ impl Name {
         if size >= MAX_NAME_LENGTH {
             Err(PacketError::FormatError)
         } else {
-            Ok((Self { labels, len: size }, domain_end))
+            Ok((Self { labels }, domain_end))
         }
     }
 
@@ -162,7 +171,7 @@ impl Debug for Name {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Name")
             .field("labels", &self.labels)
-            .field("len", &self.len)
+            .field("len", &self.len())
             .finish()
     }
 }
@@ -170,6 +179,9 @@ impl Debug for Name {
 // we trust that every label in `Name` is valid
 impl Display for Name {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.labels.is_empty() {
+            f.write_char('.')?;
+        }
         for label in self.labels.iter() {
             f.write_fmt(format_args!("{}.", label))?;
         }
@@ -205,6 +217,19 @@ mod domain_test {
         assert!(subdomain.is_subdomain_of(&domain));
     }
 
+    #[test]
+    fn test_try_from() {
+        let rs = Name::try_from("example.com");
+        assert!(rs.is_ok());
+        let n = rs.unwrap();
+        assert_eq!(n.to_string(), "example.com.".to_string());
+
+        let rs = Name::try_from(".");
+        assert!(rs.is_ok());
+        let n = rs.unwrap();
+        assert_eq!(n.len(), 1);
+    }
+
     use super::PTR_MASK;
     #[test]
     fn test_parse() {
@@ -223,6 +248,14 @@ mod domain_test {
             buf.push(0);
             Bytes::from(buf)
         }
+
+        // test empty domain
+        let empty = Bytes::from(b"\0".to_vec());
+        let parsed = Name::parse(empty, 0);
+        assert!(parsed.is_ok());
+        let (d, p) = parsed.unwrap();
+        assert_eq!(d.to_string(), ".");
+        assert_eq!(p, 1);
 
         // test invalid domain
         let invalid = Bytes::from(b"\x03com\x03".to_vec());
@@ -252,6 +285,12 @@ mod domain_test {
 
     #[test]
     fn test_as_bytes_uncompressed() {
+        // test empty domain
+        let name = Name::try_from(".").unwrap();
+        let encoded: &[u8] = &[0];
+        assert_eq!(name.as_bytes_uncompressed(), encoded);
+
+        // test normal domain
         let name = Name::try_from("sm.ms").unwrap();
         let encoded: &[u8] = &[2, b's', b'm', 2, b'm', b's', 0];
         assert_eq!(name.as_bytes_uncompressed(), encoded);

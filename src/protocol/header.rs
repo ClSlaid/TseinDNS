@@ -163,7 +163,7 @@ impl Header {
     }
 
     /// how many ns records are there in the packet
-    pub fn ns_count(&self) -> u16 {
+    pub fn authority_count(&self) -> u16 {
         self.authorities
     }
 
@@ -334,7 +334,7 @@ mod test {
 
         assert_eq!(h.question_count(), 1);
         assert_eq!(h.answer_count(), 0);
-        assert_eq!(h.ns_count(), 0);
+        assert_eq!(h.authority_count(), 0);
         assert_eq!(h.addition_count(), 0);
     }
 }

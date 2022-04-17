@@ -14,13 +14,42 @@ pub const PTR_MASK: u8 = 0xc0;
 type Label = String;
 
 /// ## `Name` represents domain name.
-/// `Name` stores domain name as a vector of `Label`s. For example, `www.google.com.cn` could be represented as following pseudo code:
-/// ```text
-/// Name {vec![Label("www"), Label("google"), Label("com"), Label("cn")]}
+/// `Name` stores domain name as a vector of `Label`s.
 /// ```
-#[derive(Clone)]
+/// use tsein_dns::protocol::Name;
+/// let name = "example.com.";  // watch out for the point in the ending of the name!
+/// let domain = Name::try_from(name.clone()).unwrap(); // Name {labels: vec!["example".to_string(), "com".to_string()]}
+/// assert_eq!(domain.len(), name.len());
+/// ```
+/// If the domain is name.root, which usually referred to as "."
+/// ```
+/// use tsein_dns::protocol::Name;
+/// let name_root = Name::try_from(".").unwrap(); // Name {labels: vec![]};
+/// assert_eq!(name_root.len(), 1);
+/// ```
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct Name {
     labels: Vec<Label>,
+}
+
+impl PartialOrd for Name {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.labels.partial_cmp(&other.labels)
+    }
+}
+
+impl Ord for Name {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        use std::cmp::Ordering;
+        for (s, o) in self.labels.iter().zip(other.labels.iter()) {
+            match s.cmp(o) {
+                Ordering::Less => Ordering::Less,
+                Ordering::Equal => continue,
+                Ordering::Greater => Ordering::Greater,
+            };
+        }
+        Ordering::Equal
+    }
 }
 
 impl Name {
@@ -165,6 +194,16 @@ impl Name {
             .zip(self.labels.iter().rev())
             .all(|(o, s)| *o == *s)
     }
+
+    pub fn get_parent_domain(&self) -> Self {
+        if self.len() <= 1 {
+            Self { labels: vec![] }
+        } else {
+            Self {
+                labels: self.labels[1..].into(),
+            }
+        }
+    }
 }
 
 impl Debug for Name {
@@ -186,15 +225,6 @@ impl Display for Name {
             f.write_fmt(format_args!("{}.", label))?;
         }
         Ok(())
-    }
-}
-
-impl PartialEq for Name {
-    fn eq(&self, other: &Self) -> bool {
-        self.labels
-            .iter()
-            .zip(other.labels.iter())
-            .all(|(s, o)| *s == *o)
     }
 }
 

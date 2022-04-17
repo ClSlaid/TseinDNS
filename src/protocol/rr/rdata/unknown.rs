@@ -4,7 +4,7 @@ use crate::protocol::{error::PacketError, rr::RRType};
 
 use super::Rdata;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Unknown {
     rtype: RRType,
     length: usize,
@@ -24,7 +24,7 @@ impl Unknown {
     where
         Self: Sized,
     {
-        let mut p = packet.clone();
+        let mut p = packet;
         let length = p.get_u16() as usize;
         let data = Bytes::copy_from_slice(&p[..length]);
         let unknown = Self {

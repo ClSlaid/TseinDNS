@@ -1,4 +1,5 @@
 use bytes::{Buf, BufMut, Bytes, BytesMut};
+use tokio::time;
 
 mod rdata;
 
@@ -32,7 +33,7 @@ use rdata::{a::A, aaaa::Aaaa, cname::Cname, mx::Mx, ns::Ns, soa::Soa, unknown::U
 /// +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
 /// ```
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RR {
     domain: Name,
     ttl: u32,
@@ -42,12 +43,39 @@ pub struct RR {
     r_data: RRData,
 }
 
+impl RR {
+    pub fn new(domain: Name, ttl: std::time::Duration, class: RRClass, r_data: RRData) -> Self {
+        let ty = r_data.get_type();
+        let seconds = ttl.as_secs() as u32;
+        RR {
+            domain,
+            ttl: seconds,
+            ty,
+            class,
+            size: 0,
+            r_data,
+        }
+    }
+    pub fn get_domain(&self) -> Name {
+        self.domain.clone()
+    }
+    pub fn get_type(&self) -> RRType {
+        self.ty
+    }
+    pub fn into_rdata(self) -> RRData {
+        self.r_data
+    }
+    pub fn get_ttl(&self) -> time::Duration {
+        time::Duration::from_secs(self.ttl as u64)
+    }
+}
+
 // TODO: replace redundant code with macron
 /// ## RRData
 /// The `RRData` section of `RR`.
 /// It also implicitly points out the `TYPE` of `RR`.
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum RRData {
     A(A),
     Aaaa(Aaaa),

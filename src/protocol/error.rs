@@ -5,7 +5,7 @@ use thiserror::Error;
 use super::{domain::Name, header::Op};
 
 /// Error occurred in parsing DNS packets
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub enum PacketError {
     #[error("Format Error in Query")]
     FormatError,

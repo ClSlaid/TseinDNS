@@ -3,7 +3,7 @@ use crate::protocol::error::PacketError;
 use super::{try_into_rdata_length, Name, Rdata};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Mx {
     preference: u16,
     domain: Name,
@@ -34,7 +34,7 @@ impl Rdata for Mx {
 
         let pos = pos + 4;
 
-        let (domain, domain_end) = Name::parse(packet.clone(), pos)?;
+        let (domain, domain_end) = Name::parse(packet, pos)?;
         let mx = Mx { preference, domain };
         if domain_end == end {
             Ok((mx, end))

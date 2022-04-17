@@ -2,7 +2,9 @@ use std::fmt::Display;
 
 use bytes::{BufMut, Bytes, BytesMut};
 
-pub use self::{domain::Name, error::PacketError, header::Header, question::Question, rr::RR};
+pub use self::{
+    domain::Name, error::PacketError, header::Header, question::Question, rr::RRData, rr::RR,
+};
 
 trait PacketContent {
     fn size(&self) -> usize;
@@ -12,7 +14,7 @@ trait PacketContent {
     fn into_bytes(self) -> Result<BytesMut, PacketError>;
 }
 
-// Todo: refact Packet, it sucks
+// Todo: refract Packet, it sucks
 /// DNS data get from primitive packet
 pub struct Packet {
     pub header: Header,
@@ -190,7 +192,7 @@ impl Packet {
 /// and will automatically implements `From<i32>` for `Foo` and `From<Foo>` for `i32`.
 macro_rules! pub_map_enum {
     ($name:ident <$t:ty> {$($key: ident => $value: expr),*; $fallback:ident}) => {
-        #[derive(PartialEq, Eq, Debug, Copy, Clone)]
+        #[derive(PartialEq, Eq, Debug, Copy, Clone, Hash)]
         pub enum $name {
             $($key,)*
             $fallback($t),

@@ -26,7 +26,7 @@ pub enum Task {
     Query(Question, mpsc::UnboundedSender<Answer>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Answer {
     Error(PacketError),
     Answer(RR),

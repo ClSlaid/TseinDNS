@@ -5,8 +5,8 @@ use std::time::Duration;
 
 use bytes::{Bytes, BytesMut};
 use rand::prelude::random;
-use tokio::sync::mpsc;
 use tokio::sync::Mutex;
+use tokio::sync::{mpsc, oneshot};
 use tokio::time::timeout;
 use tokio::{net::UdpSocket, sync::OnceCell};
 use tracing;
@@ -54,7 +54,7 @@ impl Manager {
         self: Arc<Self>,
         mut recur_receiver: mpsc::UnboundedReceiver<Task>,
     ) -> Result<(), std::io::Error> {
-        let mp: Arc<Mutex<BTreeMap<u16, mpsc::Sender<Vec<Answer>>>>> =
+        let mp: Arc<Mutex<BTreeMap<u16, oneshot::Sender<Vec<Answer>>>>> =
             Arc::new(Mutex::new(BTreeMap::new()));
 
         let mp_listener = mp.clone();
@@ -87,15 +87,11 @@ impl Manager {
                             .chain(pkt.authorities.into_iter().map(Answer::NameServer))
                             .chain(pkt.additions.into_iter().map(Answer::Additional))
                             .collect();
-                        let sender;
                         {
-                            let guard = mp.lock().await;
-                            sender = guard.get(&id);
-                            if sender.is_none() {
-                                return;
+                            let mut guard = mp.lock().await;
+                            if let Some(sender) = guard.remove(&id) {
+                                sender.send(answers).unwrap();
                             }
-                            let sender = sender.unwrap();
-                            sender.send(answers).await.unwrap();
                         }
                     }
                     Err(e) => {
@@ -124,7 +120,7 @@ impl Manager {
             let Task::Query(query, answer_sender) = task;
 
             // sending answer between `listening` handle and `checker`
-            let (checker_sender, mut checker_receiver) = mpsc::channel(1);
+            let (checker_sender, checker_receiver) = oneshot::channel();
             let mp = mp.clone();
             {
                 // insert into map before sending packet, to avoid data racing
@@ -139,7 +135,7 @@ impl Manager {
             packet_sender.send(buf).await.unwrap();
             // check after the packet is sent
             let checker = tokio::spawn(async move {
-                let answers = timeout(get_time_out().await, checker_receiver.recv()).await;
+                let answers = timeout(get_time_out().await, checker_receiver).await;
                 if answers.is_err() {
                     // timeout
                     answer_sender
@@ -148,7 +144,7 @@ impl Manager {
                     return;
                 }
                 let answers = answers.unwrap();
-                if answers.is_none() {
+                if answers.is_err() {
                     // sender closed unexpectedly
                     answer_sender
                         .send(Answer::Error(PacketError::ServFail))
@@ -162,8 +158,10 @@ impl Manager {
             });
             checkers.push(checker);
         }
-        tokio::join!(listening, forwarding);
-        futures::future::join_all(checkers);
+        let (l, f) = tokio::join!(listening, forwarding);
+        futures::future::join_all(checkers).await;
+        l.unwrap();
+        f.unwrap();
         Ok(())
     }
 

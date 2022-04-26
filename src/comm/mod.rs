@@ -1,3 +1,6 @@
+// pub(crate) mod stream;
+// pub(crate) mod tcp_stream;
+
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -5,13 +8,12 @@ use std::time::Duration;
 
 use bytes::{Bytes, BytesMut};
 use rand::prelude::random;
-use tokio::sync::Mutex;
-use tokio::sync::{mpsc, oneshot};
+use tokio::net::UdpSocket;
+use tokio::sync::{mpsc, Mutex, OnceCell, oneshot};
 use tokio::time::timeout;
-use tokio::{net::UdpSocket, sync::OnceCell};
 use tracing;
 
-use crate::protocol::{Packet, PacketError, Question, RR};
+use crate::protocol::{Packet, PacketError, Question, RR, TransactionError};
 
 static TIME_OUT: OnceCell<Duration> = OnceCell::const_new();
 
@@ -169,9 +171,14 @@ impl Manager {
         &self,
         pkt: Packet,
         task_sender: mpsc::UnboundedSender<Task>,
-    ) -> Result<Vec<Answer>, PacketError> {
+    ) -> Result<Vec<Answer>, TransactionError> {
+        let id = Some(pkt.get_id());
         if !pkt.is_query() {
-            return Err(PacketError::ServFail);
+            let err = TransactionError {
+                id,
+                error: PacketError::ServFail,
+            };
+            return Err(err);
         }
 
         let mut rxs = vec![];
@@ -185,7 +192,10 @@ impl Manager {
         for rx in rxs.iter_mut() {
             let answer = rx.recv().await.unwrap();
             match answer {
-                Answer::Error(err) => return Err(err),
+                Answer::Error(error) => {
+                    let err = TransactionError { id, error };
+                    return Err(err);
+                }
                 answer => answers.push(answer),
             }
         }
@@ -193,9 +203,11 @@ impl Manager {
         Ok(answers)
     }
 
-    async fn udp_fail(&self, id: u16, err: PacketError, client: SocketAddr) {
+    async fn udp_fail(&self, err: TransactionError, client: SocketAddr) {
         let udp = self.udp.clone();
-        let packet = Packet::new_failure(id, err);
+        let TransactionError { id, error } = err;
+        let id = id.unwrap_or(0);
+        let packet = Packet::new_failure(id, error);
         udp.send_to(&packet.into_bytes(), client).await.unwrap();
     }
 
@@ -227,8 +239,7 @@ impl Manager {
                             client,
                             err
                         );
-                        let id = ((packet[0] as u16) << 8) | (packet[1] as u16);
-                        s.udp_fail(id, err, client).await;
+                        s.udp_fail(err, client).await;
                     });
                     continue;
                 }
@@ -243,7 +254,7 @@ impl Manager {
                 let id = pkt.get_id();
                 let rs = s.transaction(pkt, task_sender).await;
                 if rs.is_err() {
-                    s.udp_fail(id, rs.unwrap_err(), client).await;
+                    s.udp_fail(rs.unwrap_err(), client).await;
                     return;
                 }
                 let answers = rs.unwrap();

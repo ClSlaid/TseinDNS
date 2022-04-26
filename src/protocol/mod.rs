@@ -3,7 +3,12 @@ use std::fmt::Display;
 use bytes::{BufMut, Bytes, BytesMut};
 
 pub use self::{
-    domain::Name, error::PacketError, header::Header, question::Question, rr::RRData, rr::RR,
+    domain::Name,
+    error::{PacketError, TransactionError},
+    header::Header,
+    question::Question,
+    rr::RR,
+    rr::RRData,
 };
 
 trait PacketContent {
@@ -38,7 +43,7 @@ impl Packet {
     }
     // make a new query
     pub fn new_query(id: u16, query: Question) -> Self {
-        let header = Header::new_query(id, 1);
+        let header = Header::new_query(id);
         Self {
             header,
             questions: vec![query],
@@ -49,7 +54,7 @@ impl Packet {
     }
 
     // assuming the packet buffer contains at least 1 packet...
-    pub fn parse_packet(packet: Bytes, offset: usize) -> Result<Packet, PacketError> {
+    pub fn parse_packet(packet: Bytes, offset: usize) -> Result<Packet, TransactionError> {
         tracing::trace!(
             "parse packet at offset {}, packet size: {}",
             offset,
@@ -58,32 +63,43 @@ impl Packet {
 
         let h = Header::parse(packet.clone(), offset)?;
         tracing::trace!("parse header successful with header {:?}", h);
+
+        let id = Some(h.get_id());
+
         let (mut questions, mut answers) = (vec![], vec![]);
         let mut offset = offset + 12;
 
         if h.is_query() && h.answer_count() != 0 {
+            let err = TransactionError {
+                id,
+                error: PacketError::FormatError,
+            };
             // no answer is expected in query packet.
-            return Err(PacketError::FormatError);
+            return Err(err);
         }
         for _ in 0..h.question_count() {
-            let ques = Question::parse(packet.clone(), offset)?;
+            let ques = Question::parse(packet.clone(), offset)
+                .map_err(|error| TransactionError { id, error })?;
             offset += ques.size();
             questions.push(ques);
         }
         for _ in 0..h.answer_count() {
-            let rr = RR::parse(packet.clone(), offset)?;
+            let rr = RR::parse(packet.clone(), offset)
+                .map_err(|error| TransactionError { id, error })?;
             offset += rr.size();
             answers.push(rr);
         }
         let mut authorities = Vec::new();
         for _ in 0..h.authority_count() {
-            let rr = RR::parse(packet.clone(), offset)?;
+            let rr = RR::parse(packet.clone(), offset)
+                .map_err(|error| TransactionError { id, error })?;
             offset += rr.size();
             authorities.push(rr);
         }
         let mut additions = Vec::new();
         for _ in 0..h.addition_count() {
-            let rr = RR::parse(packet.clone(), offset)?;
+            let rr = RR::parse(packet.clone(), offset)
+                .map_err(|error| TransactionError { id, error })?;
             offset += rr.size();
             additions.push(rr);
         }
@@ -268,6 +284,7 @@ fn test_pub_map_enum() {
     assert_eq!(i32::from(my_foo), 0);
     assert_eq!(i32::from(unknown), 114514);
 }
+
 /// Domain names
 mod domain;
 /// Error types
@@ -281,10 +298,9 @@ mod rr;
 
 #[cfg(test)]
 mod integrated_test {
-    use crate::protocol::{header::Header, question::Question, PacketContent, RRClass, RRType};
     use bytes::{BufMut, Bytes, BytesMut};
 
-    use super::domain::PTR_MASK;
+    use crate::protocol::{header::Header, PacketContent, question::Question, RRClass, RRType};
 
     #[test]
     fn parse_dns_lookup() {
@@ -325,7 +341,7 @@ mod integrated_test {
         packet.put_u16(0); // id == 0;
         packet.put_u8(1); // query = True (0); Opcode = QUERY (0); AA = FALSE (0); TC = FALSE (0); RD = TRUE (1)
         packet.put_u8(0x20); // z = 1; rcode = 0;
-        packet.put_u16(2); // QDCOUNT = 2;
+        packet.put_u16(1); // QDCOUNT = 2;
         packet.put_u16(1); // ANCOUNT = 1;
         packet.put_u16(0); // NSCOUNT = 0;
         packet.put_u16(0); // ARCOUNT = 0;
@@ -341,18 +357,6 @@ mod integrated_test {
         packet.put_u16(u16::from(q_type));
         packet.put_u16(u16::from(q_class));
 
-        // create question 2
-        // DNS domain name compressing
-        // sub.example.com A
-        let mut q_name = BytesMut::new();
-        q_name.put_u8(3);
-        q_name.put_slice(&[b's', b'u', b'b']);
-        let jump_to = ((PTR_MASK as u16) << 8) | 12_u16;
-        q_name.put_u16(jump_to);
-        packet.put_slice(&q_name);
-        packet.put_u16(u16::from(q_type));
-        packet.put_u16(u16::from(q_class));
-
         let p = Bytes::from(packet.clone());
 
         let outcome = super::Packet::parse_packet(p, 0);
@@ -363,12 +367,11 @@ mod integrated_test {
         let outcome = super::Packet::parse_packet(p, 0);
         assert!(outcome.is_ok());
         let pkt = outcome.unwrap();
-        assert_eq!(pkt.questions.len(), 2);
+        assert_eq!(pkt.questions.len(), 1);
         assert_eq!(pkt.answers.len(), 0);
         assert_eq!(pkt.authorities.len(), 0);
         assert_eq!(pkt.additions.len(), 0);
         assert_eq!(pkt.header.get_id(), 0);
         assert_eq!(pkt.questions[0].get_name().to_string(), "example.com.");
-        assert_eq!(pkt.questions[1].get_name().to_string(), "sub.example.com.");
     }
 }

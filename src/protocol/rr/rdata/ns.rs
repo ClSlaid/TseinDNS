@@ -4,7 +4,7 @@ use bytes::{Buf, BufMut, BytesMut};
 
 use crate::protocol::{domain::Name, error::PacketError};
 
-use super::{try_into_rdata_length, Rdata};
+use super::{Rdata, try_into_rdata_length};
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Ns {
@@ -63,8 +63,10 @@ impl Display for Ns {
 
 #[cfg(test)]
 mod ns_tests {
-    use super::{Name, Ns, Rdata};
     use bytes::Bytes;
+
+    use super::{Name, Ns, Rdata};
+
     #[test]
     fn test_parse() {
         // test invalid

@@ -1,9 +1,10 @@
 use std::fmt::Display;
 
+use bytes::{Buf, BufMut, Bytes, BytesMut};
+
 use crate::protocol::error::PacketError;
 
-use super::{try_into_rdata_length, Name, Rdata};
-use bytes::{Buf, BufMut, Bytes, BytesMut};
+use super::{Name, Rdata, try_into_rdata_length};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Cname {
@@ -12,8 +13,8 @@ pub struct Cname {
 
 impl Rdata for Cname {
     fn parse(packet: Bytes, pos: usize) -> Result<(Self, usize), PacketError>
-    where
-        Self: Sized,
+        where
+            Self: Sized,
     {
         if pos + 4 > packet.len() {
             return Err(PacketError::FormatError);

@@ -230,8 +230,11 @@ impl Display for Name {
 
 #[cfg(test)]
 mod domain_test {
-    use super::Name;
     use bytes::{Buf, BufMut, Bytes, BytesMut};
+
+    use super::Name;
+    use super::PTR_MASK;
+
     #[test]
     fn test_len() {
         let d1 = Name::try_from("example.com").unwrap();
@@ -260,7 +263,6 @@ mod domain_test {
         assert_eq!(n.len(), 1);
     }
 
-    use super::PTR_MASK;
     #[test]
     fn test_parse() {
         fn gen_simple_domain_name(domain: &str) -> Bytes {

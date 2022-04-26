@@ -1,11 +1,13 @@
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use tokio::time;
 
-mod rdata;
+use rdata::{a::A, aaaa::Aaaa, cname::Cname, mx::Mx, ns::Ns, Rdata, soa::Soa, unknown::Unknown};
+
+use crate::protocol::{PacketContent, RRType};
 
 use super::{domain::Name, error::PacketError, RRClass};
-use crate::protocol::{PacketContent, RRType};
-use rdata::{a::A, aaaa::Aaaa, cname::Cname, mx::Mx, ns::Ns, soa::Soa, unknown::Unknown, Rdata};
+
+mod rdata;
 
 /// ## Resource Record
 /// As is described in RFC1035,
@@ -32,14 +34,14 @@ use rdata::{a::A, aaaa::Aaaa, cname::Cname, mx::Mx, ns::Ns, soa::Soa, unknown::U
 /// /                                               /
 /// +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
 /// ```
-
 #[derive(Debug, Clone)]
 pub struct RR {
     domain: Name,
     ttl: u32,
     ty: RRType,
     class: RRClass,
-    size: usize, // total length of RR in packet
+    size: usize,
+    // total length of RR in packet
     r_data: RRData,
 }
 
@@ -74,7 +76,6 @@ impl RR {
 /// ## RRData
 /// The `RRData` section of `RR`.
 /// It also implicitly points out the `TYPE` of `RR`.
-
 #[derive(Debug, Clone)]
 pub enum RRData {
     A(A),
@@ -85,6 +86,7 @@ pub enum RRData {
     Soa(Soa),
     Unknown(Unknown),
 }
+
 impl RRData {
     pub fn get_type(&self) -> RRType {
         match self {

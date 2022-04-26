@@ -1,3 +1,4 @@
+use std::fmt::Formatter;
 use std::net::IpAddr;
 
 use thiserror::Error;
@@ -17,4 +18,16 @@ pub enum PacketError {
     NotImpl(Op),
     #[error("Refused Connection from: {0}")]
     Refused(IpAddr),
+}
+
+#[derive(Error, Debug, Clone)]
+pub struct TransactionError {
+    pub(crate) id: Option<u16>,
+    pub(crate) error: PacketError,
+}
+
+impl std::fmt::Display for TransactionError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Transaction {:?} got error: {:?}", self.id, self.error)
+    }
 }

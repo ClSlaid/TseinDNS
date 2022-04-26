@@ -1,8 +1,9 @@
 use std::fmt::Debug;
 use std::fmt::Display;
 
-use super::{error::PacketError, PacketContent};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
+
+use super::error::{PacketError, TransactionError};
 
 const QR_MASK: u8 = 0x80;
 const OP_MASK: u8 = 0x78;
@@ -45,7 +46,7 @@ pub struct Header {
 }
 
 impl Header {
-    pub fn new_query(id: u16, questions: u16) -> Self {
+    pub fn new_query(id: u16) -> Self {
         Header {
             id,
             is_query: true,
@@ -56,7 +57,7 @@ impl Header {
             is_rec_avl: false,
             z: 0,
             response: Rcode::NoError,
-            questions,
+            questions: 1,
             answers: 0,
             authorities: 0,
             additional: 0,
@@ -191,12 +192,20 @@ impl Header {
     }
 }
 
-impl PacketContent for Header {
-    fn parse(packet: Bytes, _pos: usize) -> Result<Self, PacketError>
-    where
-        Self: Sized,
+impl Header {
+    pub(crate) fn parse(packet: Bytes, pos: usize) -> Result<Self, TransactionError>
+        where
+            Self: Sized,
     {
         let mut buf = packet;
+        if buf.len() - pos <= 12 {
+            let err = TransactionError {
+                id: None,
+                error: PacketError::FormatError,
+            };
+            return Err(err);
+        }
+
         let id = buf.get_u16();
 
         let a = buf.get_u8();
@@ -212,6 +221,16 @@ impl PacketContent for Header {
         let response = Rcode::from(b & RC_MASK);
 
         let questions = buf.get_u16();
+
+        // Multiple queries within one packet is not allowed
+        if questions > 1 {
+            let err = TransactionError {
+                id: Some(id),
+                error: PacketError::ServFail,
+            };
+            return Err(err);
+        }
+
         let answers = buf.get_u16();
         let name_servers = buf.get_u16();
         let additional = buf.get_u16();
@@ -232,7 +251,7 @@ impl PacketContent for Header {
         })
     }
 
-    fn into_bytes(self) -> Result<BytesMut, PacketError> {
+    pub fn into_bytes(self) -> Result<BytesMut, PacketError> {
         let mut buf = BytesMut::with_capacity(12);
         buf.put_u16(self.id);
         let a = {
@@ -301,7 +320,6 @@ mod test {
     #[test]
     fn test_parse_header() {
         use super::{Op, Rcode};
-        use crate::protocol::PacketContent;
         use bytes::{BufMut, Bytes, BytesMut};
 
         let mut packet = BytesMut::new();

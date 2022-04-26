@@ -2,7 +2,7 @@ use bytes::{Buf, BufMut, Bytes, BytesMut};
 
 use crate::protocol::{domain::Name, error::PacketError};
 
-use super::{try_into_rdata_length, Rdata};
+use super::{Rdata, try_into_rdata_length};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Soa {
@@ -78,6 +78,7 @@ impl Rdata for Soa {
         Ok(buf)
     }
 }
+
 #[test]
 fn test_parse_and_to_bytes() {
     let mname = Name::try_from("alpha.com").unwrap().as_bytes_uncompressed();

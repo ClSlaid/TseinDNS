@@ -1,7 +1,9 @@
 use std::fmt::Debug;
 use std::fmt::Display;
 
+use async_trait::async_trait;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
+use tokio::io::AsyncReadExt;
 
 use super::error::{PacketError, TransactionError};
 
@@ -198,7 +200,7 @@ impl Header {
             Self: Sized,
     {
         let mut buf = packet;
-        if buf.len() - pos <= 12 {
+        if buf.len() - pos < 12 {
             let err = TransactionError {
                 id: None,
                 error: PacketError::FormatError,
@@ -206,7 +208,7 @@ impl Header {
             return Err(err);
         }
 
-        let id = buf.get_u16();
+        let id = Some(buf.get_u16());
 
         let a = buf.get_u8();
         let is_query = a & QR_MASK != QR_MASK;
@@ -225,15 +227,17 @@ impl Header {
         // Multiple queries within one packet is not allowed
         if questions > 1 {
             let err = TransactionError {
-                id: Some(id),
+                id,
                 error: PacketError::ServFail,
             };
             return Err(err);
         }
 
         let answers = buf.get_u16();
-        let name_servers = buf.get_u16();
+        let authorities = buf.get_u16();
         let additional = buf.get_u16();
+
+        let id = id.unwrap();
         Ok(Self {
             id,
             is_query,
@@ -246,7 +250,57 @@ impl Header {
             response,
             questions,
             answers,
-            authorities: name_servers,
+            authorities,
+            additional,
+        })
+    }
+
+    pub async fn parse_stream<S>(stream: &mut S) -> Result<Self, TransactionError>
+        where S: AsyncReadExt + Unpin
+    {
+        let error = PacketError::FormatError;
+        let id = stream.read_u16().await
+            .map_err(|_| TransactionError { id: None, error: error.clone() })
+            .map(Some)?;
+        let a = stream.read_u8().await.map_err(|_| TransactionError { id, error: error.clone() })?;
+        let is_query = a & QR_MASK != QR_MASK;
+        let is_auth = a & AA_MASK == AA_MASK;
+        let opcode = Op::from((a & OP_MASK) >> 3);
+        let is_trunc = a & TC_MASK == TC_MASK;
+        let is_rec_des = a & RD_MASK == RD_MASK;
+
+        let b = stream.read_u8().await.map_err(|_| TransactionError { id, error: error.clone() })?;
+        let is_rec_avl = b & RA_MASK == RA_MASK;
+        let z = (b & Z_MASK) >> 5;
+        let response = Rcode::from(b & RC_MASK);
+
+        let questions = stream.read_u16().await.map_err(|_| TransactionError { id, error: error.clone() })?;
+        // Multiple queries within one packet is not allowed
+        if questions > 1 {
+            let err = TransactionError {
+                id,
+                error: error.clone(),
+            };
+            return Err(err);
+        }
+        let answers = stream.read_u16().await.map_err(|_| TransactionError { id, error: error.clone() })?;
+        let authorities = stream.read_u16().await.map_err(|_| TransactionError { id, error: error.clone() })?;
+        let additional = stream.read_u16().await.map_err(|_| TransactionError { id, error: error.clone() })?;
+
+        let id = id.unwrap();
+        Ok(Self {
+            id,
+            is_query,
+            opcode,
+            is_trunc,
+            is_auth,
+            is_rec_des,
+            is_rec_avl,
+            z,
+            response,
+            questions,
+            answers,
+            authorities,
             additional,
         })
     }
@@ -331,7 +385,7 @@ mod test {
         packet.put_u16(0); // ANCOUNT = 0;
         packet.put_u16(0); // NSCOUNT = 0;
         packet.put_u16(0); // ARCOUNT = 0;
-                           // creat question
+        // creat question
 
         let h_packet = Bytes::from(packet);
 

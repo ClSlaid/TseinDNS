@@ -23,6 +23,7 @@ pub enum PacketError {
 #[derive(Error, Debug, Clone)]
 pub struct TransactionError {
     pub(crate) id: Option<u16>,
+    #[source]
     pub(crate) error: PacketError,
 }
 

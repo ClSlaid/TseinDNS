@@ -13,8 +13,8 @@ pub struct Ns {
 
 impl Rdata for Ns {
     fn parse(packet: bytes::Bytes, pos: usize) -> Result<(Self, usize), PacketError>
-    where
-        Self: Sized,
+        where
+            Self: Sized,
     {
         if pos + 4 > packet.len() {
             return Err(PacketError::FormatError);

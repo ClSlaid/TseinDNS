@@ -3,11 +3,12 @@ authors = ["ClSlaid <cailue@bupt.edu.cn>"]
 description = "A DNS Server."
 edition = "2021"
 name = "tsein-dns"
-version = "0.1.0"
+version = "0.1.2"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+async-trait = "0.1.53"
 rand = "0.8.5"
 bytes = "1.1.0"
 color-eyre = "0.6.1"

@@ -1,6 +1,3 @@
-// pub(crate) mod stream;
-// pub(crate) mod tcp_stream;
-
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -9,11 +6,18 @@ use std::time::Duration;
 use bytes::{Bytes, BytesMut};
 use rand::prelude::random;
 use tokio::net::UdpSocket;
-use tokio::sync::{mpsc, Mutex, OnceCell, oneshot};
+use tokio::sync::{mpsc, oneshot, Mutex, OnceCell};
 use tokio::time::timeout;
 use tracing;
 
-use crate::protocol::{Packet, PacketError, Question, RR, TransactionError};
+use crate::protocol::{Packet, PacketError, Question, TransactionError, RR};
+
+pub use stream::TcpService;
+
+pub(crate) mod forward;
+pub(crate) mod stream;
+
+pub(crate) type TaskMap = Arc<Mutex<BTreeMap<u16, oneshot::Sender<Vec<Answer>>>>>;
 
 static TIME_OUT: OnceCell<Duration> = OnceCell::const_new();
 
@@ -37,16 +41,16 @@ pub enum Answer {
 }
 
 #[derive(Clone)]
-pub struct Manager {
+pub struct UdpService {
     // serving port, to downstream
     udp: Arc<UdpSocket>,
     // recursive lookup socket, to upstream
     forward: Arc<UdpSocket>,
 }
 
-impl Manager {
-    pub fn new(udp: UdpSocket, forward: UdpSocket) -> Manager {
-        Manager {
+impl UdpService {
+    pub fn new(udp: UdpSocket, forward: UdpSocket) -> UdpService {
+        UdpService {
             udp: Arc::new(udp),
             forward: Arc::new(forward),
         }
@@ -56,56 +60,16 @@ impl Manager {
         self: Arc<Self>,
         mut recur_receiver: mpsc::UnboundedReceiver<Task>,
     ) -> Result<(), std::io::Error> {
-        let mp: Arc<Mutex<BTreeMap<u16, oneshot::Sender<Vec<Answer>>>>> =
-            Arc::new(Mutex::new(BTreeMap::new()));
+        let mp: TaskMap = Arc::new(Mutex::new(BTreeMap::new()));
 
-        let mp_listener = mp.clone();
         let (buf_sender, mut buf_receiver) = mpsc::channel::<Bytes>(4);
 
         let s = self.clone();
         tracing::debug!("setting up listener");
-        let listening = tokio::spawn(async move {
-            // this handle will receive packet from upstream and push them into map
-            let mut buf = BytesMut::from(&[0_u8; 1024][..]);
-            while let Ok(sz) = s.forward.clone().recv(&mut buf).await {
-                if sz < 20 {
-                    // malformed packet
-                    tracing::debug!(
-                        "received malformed packet from upstream, length {}, data: {:?}",
-                        sz,
-                        buf
-                    );
-                    continue;
-                }
-                let rs = Packet::parse_packet(buf.clone().into(), 0);
-                match rs {
-                    Ok(pkt) => {
-                        let id = pkt.get_id();
-                        let mp = mp_listener.clone();
-                        let answers = pkt
-                            .answers
-                            .into_iter()
-                            .map(Answer::Answer)
-                            .chain(pkt.authorities.into_iter().map(Answer::NameServer))
-                            .chain(pkt.additions.into_iter().map(Answer::Additional))
-                            .collect();
-                        {
-                            let mut guard = mp.lock().await;
-                            if let Some(sender) = guard.remove(&id) {
-                                sender.send(answers).unwrap();
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        tracing::debug!("received failure from upstream: {}", e);
-                        // maybe malformed packet or corrupted data
-                        // ignore it
-                        // if there is a task that corresponds to the packet
-                        // the task will gracefully timeout and return back with ServFail
-                    }
-                }
-            }
-        });
+
+        // passing answers back to forward lookup
+        let listening = tokio::spawn(forward::listening(s.forward.clone(), mp.clone()));
+
         let forward_socket = self.forward.clone();
         // sending packet that received from task queue
         let forwarding = tokio::spawn(async move {
@@ -167,42 +131,6 @@ impl Manager {
         Ok(())
     }
 
-    async fn transaction(
-        &self,
-        pkt: Packet,
-        task_sender: mpsc::UnboundedSender<Task>,
-    ) -> Result<Vec<Answer>, TransactionError> {
-        let id = Some(pkt.get_id());
-        if !pkt.is_query() {
-            let err = TransactionError {
-                id,
-                error: PacketError::ServFail,
-            };
-            return Err(err);
-        }
-
-        let mut rxs = vec![];
-        for query in pkt.questions {
-            let (a_sender, a_recv) = mpsc::unbounded_channel::<Answer>();
-            let task = Task::Query(query, a_sender);
-            rxs.push(a_recv);
-            task_sender.send(task).unwrap();
-        }
-        let mut answers = vec![];
-        for rx in rxs.iter_mut() {
-            let answer = rx.recv().await.unwrap();
-            match answer {
-                Answer::Error(error) => {
-                    let err = TransactionError { id, error };
-                    return Err(err);
-                }
-                answer => answers.push(answer),
-            }
-        }
-
-        Ok(answers)
-    }
-
     async fn udp_fail(&self, err: TransactionError, client: SocketAddr) {
         let udp = self.udp.clone();
         let TransactionError { id, error } = err;
@@ -247,12 +175,13 @@ impl Manager {
             tracing::debug!("received packet from client: {}", client);
 
             let task_sender = task_sender.clone();
+            let query = pkt.question.clone().unwrap();
 
             // spawn a new task to proceed the packet
             let s = s.clone();
             tokio::spawn(async move {
                 let id = pkt.get_id();
-                let rs = s.transaction(pkt, task_sender).await;
+                let rs = transaction(pkt, task_sender).await;
                 if rs.is_err() {
                     s.udp_fail(rs.unwrap_err(), client).await;
                     return;
@@ -261,18 +190,52 @@ impl Manager {
                 let mut resp = Packet::new_plain_answer(id);
                 for ans in answers {
                     match ans {
-                        Answer::Error(_) => {
-                            eprintln!("wtf?")
+                        Answer::Error(rcode) => {
+                            resp = Packet::new_failure(id, rcode);
+                            break;
                         }
                         Answer::Answer(ans) => resp.add_answer(ans),
                         Answer::NameServer(ns) => resp.add_authority(ns),
                         Answer::Additional(ad) => resp.add_addition(ad),
                     }
                 }
+                resp.set_question(query);
                 let packet = resp.into_bytes();
                 let udp = s.udp.clone();
                 udp.send_to(&packet, client).await.unwrap();
             });
         }
     }
+}
+
+async fn transaction(
+    pkt: Packet,
+    task_sender: mpsc::UnboundedSender<Task>,
+) -> Result<Vec<Answer>, TransactionError> {
+    let id = Some(pkt.get_id());
+    if !pkt.is_query() {
+        let err = TransactionError {
+            id,
+            error: PacketError::ServFail,
+        };
+        return Err(err);
+    }
+
+    let query = pkt.question.unwrap();
+    let (a_sender, mut a_recv) = mpsc::unbounded_channel::<Answer>();
+    let task = Task::Query(query, a_sender);
+    task_sender.send(task).unwrap();
+
+    let mut answers = vec![];
+    while let Some(answer) = a_recv.recv().await {
+        match answer {
+            Answer::Error(error) => {
+                let err = TransactionError { id, error };
+                return Err(err);
+            }
+            answer => answers.push(answer),
+        }
+    }
+
+    Ok(answers)
 }

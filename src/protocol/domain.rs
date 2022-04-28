@@ -93,8 +93,8 @@ impl Name {
     ///
     /// If err, return `PacketError::FormatError`
     pub fn parse(packet: Bytes, pos: usize) -> Result<(Self, usize), PacketError>
-    where
-        Self: Sized,
+        where
+            Self: Sized,
     {
         let mut pos = pos;
         const MAX_JUMPS: usize = 5;

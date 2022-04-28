@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use tokio::net::UdpSocket;
+use tokio::net::{TcpListener, UdpSocket};
 use tokio::sync::mpsc;
 use tokio::time;
 use tracing::instrument;
@@ -8,7 +8,7 @@ use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
 use tsein_dns::{
     cache::DnsCache,
-    comm::{Answer, Manager, Task},
+    comm::{Answer, Task, TcpService, UdpService},
     protocol::{RRClass, RR},
 };
 
@@ -33,29 +33,39 @@ async fn main() {
     // init cache
     let cache = DnsCache::new(10 * CACHE_SIZE, (5 * CACHE_SIZE) as i64);
 
-    tracing::info!("binding port 1053 as serving port");
-    let serve = UdpSocket::bind("0.0.0.0:1053").await.unwrap();
+    tracing::info!("binding port 1053 as udp serving port");
+    let udp_serve = UdpSocket::bind("0.0.0.0:1053").await.unwrap();
+    tracing::info!("binding port 1053 as tcp serving port");
+    let tcp_serve = TcpListener::bind("0.0.0.0:1053").await.unwrap();
 
     tracing::info!("binding port 1054 as forwarding port");
     let forward = UdpSocket::bind("0.0.0.0:1054").await.unwrap();
     tracing::info!("Setting up {} as upstream", ALI_DNS);
     forward.connect(ALI_DNS).await.unwrap();
 
-    let server = Arc::new(Manager::new(serve, forward));
-    let forwarder = server.clone();
-    let (task_sender, mut task_recv) = mpsc::unbounded_channel();
+    let udp_server = Arc::new(UdpService::new(udp_serve, forward));
+    let forwarder = udp_server.clone();
+    let (udp_task_sender, mut task_recv) = mpsc::unbounded_channel();
+    let tcp_task_sender = udp_task_sender.clone();
     let (rec_sender, rec_recv) = mpsc::unbounded_channel();
 
-    tracing::info!("init forwarding...");
-    let forwarding = tokio::spawn(async move {
+    tracing::info!("init UDP forwarding...");
+    let udp_forwarding = tokio::spawn(async move {
         tracing::info!("initiated forwarder");
         forwarder.run_forward(rec_recv).await
     });
 
-    tracing::info!("init serving...");
-    let serving = tokio::spawn(async move {
-        tracing::info!("initiated server");
-        server.clone().run_udp(task_sender).await
+    tracing::info!("init UDP serving...");
+    let udp_serving = tokio::spawn(async move {
+        tracing::info!("initiated udp server");
+        udp_server.clone().run_udp(udp_task_sender).await
+    });
+
+    let tcp_server = TcpService::new(tcp_serve, tcp_task_sender, CACHE_SIZE);
+    tracing::info!("init TCP serving...");
+    let tcp_serving = tokio::spawn(async move {
+        tracing::info!("initiated tcp server");
+        tcp_server.run().await
     });
 
     tracing::info!("init transaction");
@@ -128,9 +138,10 @@ async fn main() {
         }
     });
 
-    let (f, s, t) = tokio::join!(forwarding, serving, transaction);
+    let (f, s, tc, t) = tokio::join!(udp_forwarding, udp_serving, tcp_serving, transaction);
     f.unwrap().unwrap();
     s.unwrap().unwrap();
+    tc.unwrap();
     t.unwrap();
     tracing::info!("quit service");
 }

@@ -1,14 +1,15 @@
 use std::fmt::Display;
 
 use bytes::{BufMut, Bytes, BytesMut};
+use tokio::io::AsyncReadExt;
 
 pub use self::{
     domain::Name,
     error::{PacketError, TransactionError},
     header::Header,
     question::Question,
-    rr::RR,
     rr::RRData,
+    rr::RR,
 };
 
 trait PacketContent {
@@ -21,9 +22,10 @@ trait PacketContent {
 
 // Todo: refract Packet, it sucks
 /// DNS data get from primitive packet
+#[derive(Clone, Debug)]
 pub struct Packet {
     pub header: Header,
-    pub questions: Vec<Question>,
+    pub question: Option<Question>,
     pub answers: Vec<RR>,
     pub authorities: Vec<RR>,
     pub additions: Vec<RR>,
@@ -35,7 +37,7 @@ impl Packet {
         let h = Header::new_answer(id, 0, 0, 0);
         Self {
             header: h,
-            questions: vec![],
+            question: None,
             answers: vec![],
             authorities: vec![],
             additions: vec![],
@@ -46,7 +48,7 @@ impl Packet {
         let header = Header::new_query(id);
         Self {
             header,
-            questions: vec![query],
+            question: Some(query),
             answers: vec![],
             authorities: vec![],
             additions: vec![],
@@ -66,7 +68,8 @@ impl Packet {
 
         let id = Some(h.get_id());
 
-        let (mut questions, mut answers) = (vec![], vec![]);
+        let mut question = None;
+        let mut answers = vec![];
         let mut offset = offset + 12;
 
         if h.is_query() && h.answer_count() != 0 {
@@ -81,7 +84,7 @@ impl Packet {
             let ques = Question::parse(packet.clone(), offset)
                 .map_err(|error| TransactionError { id, error })?;
             offset += ques.size();
-            questions.push(ques);
+            question = Some(ques);
         }
         for _ in 0..h.answer_count() {
             let rr = RR::parse(packet.clone(), offset)
@@ -105,7 +108,95 @@ impl Packet {
         }
         let pkt = Packet {
             header: h,
-            questions,
+            question,
+            answers,
+            authorities,
+            additions,
+        };
+        Ok(pkt)
+    }
+
+    pub async fn parse_stream<S>(stream: &mut S) -> Result<Self, TransactionError>
+    where
+        S: AsyncReadExt + Unpin,
+    {
+        tracing::trace!("parsing packet from stream");
+        let len = stream.read_u16().await.map_err(|_| TransactionError {
+            id: None,
+            error: PacketError::ServFail, // treat as read an EOF, return a ServFail
+        })?;
+        let header = Header::parse_stream(stream).await?;
+        tracing::trace!("parse header successfully with header: {:?}", header);
+        let id = Some(header.get_id());
+        if len < 12 {
+            let err = TransactionError {
+                id,
+                error: PacketError::FormatError,
+            };
+            return Err(err);
+        }
+
+        let to_read = (len - 12) as usize;
+        let mut pkt = BytesMut::from([0_u8; 65535].as_slice());
+        let read = stream
+            .read(&mut pkt[12..])
+            .await
+            .map_err(|_| TransactionError {
+                id,
+                error: PacketError::FormatError,
+            })?;
+        if read < to_read {
+            let err = TransactionError {
+                id,
+                error: PacketError::FormatError,
+            };
+            return Err(err);
+        }
+
+        let mut question = None;
+        let mut answers = vec![];
+        let mut offset = 12;
+
+        let packet = Bytes::from(pkt);
+        if header.is_query() && header.answer_count() != 0 {
+            let err = TransactionError {
+                id,
+                error: PacketError::FormatError,
+            };
+            // no answer is expected in query packet.
+            return Err(err);
+        }
+
+        for _ in 0..header.question_count() {
+            let ques = Question::parse(packet.clone(), offset)
+                .map_err(|error| TransactionError { id, error })?;
+            offset += ques.size();
+            question = Some(ques);
+        }
+
+        for _ in 0..header.answer_count() {
+            let rr = RR::parse(packet.clone(), offset)
+                .map_err(|error| TransactionError { id, error })?;
+            offset += rr.size();
+            answers.push(rr);
+        }
+        let mut authorities = Vec::new();
+        for _ in 0..header.authority_count() {
+            let rr = RR::parse(packet.clone(), offset)
+                .map_err(|error| TransactionError { id, error })?;
+            offset += rr.size();
+            authorities.push(rr);
+        }
+        let mut additions = Vec::new();
+        for _ in 0..header.addition_count() {
+            let rr = RR::parse(packet.clone(), offset)
+                .map_err(|error| TransactionError { id, error })?;
+            offset += rr.size();
+            additions.push(rr);
+        }
+        let pkt = Packet {
+            header,
+            question,
             answers,
             authorities,
             additions,
@@ -118,7 +209,7 @@ impl Packet {
         let header = Header::new_failure(id, rcode);
         Packet {
             header,
-            questions: vec![],
+            question: None,
             answers: vec![],
             authorities: vec![],
             additions: vec![],
@@ -131,7 +222,7 @@ impl Packet {
         let mut buf = BytesMut::new();
         let h = self.header.into_bytes().unwrap();
         buf.put_slice(&h[..]);
-        for question in self.questions {
+        for question in self.question {
             let q = question.into_bytes().unwrap();
             buf.put_slice(&q[..]);
         }
@@ -163,11 +254,28 @@ impl Packet {
 }
 
 impl Packet {
-    pub fn add_query(&mut self, query: Question) {
-        self.questions.push(query);
-        self.header.set_questions(self.header.question_count() + 1);
+    pub fn set_question(&mut self, question: Question) {
+        self.header.set_questions(1);
+        self.question = Some(question);
     }
 
+    pub fn set_answers(&mut self, answers: Vec<RR>) {
+        self.header.set_answers(answers.len() as u16);
+        self.answers = answers;
+    }
+
+    pub fn set_authorities(&mut self, auths: Vec<RR>) {
+        self.header.set_authorities(auths.len() as u16);
+        self.authorities = auths;
+    }
+
+    pub fn set_addtionals(&mut self, adds: Vec<RR>) {
+        self.header.set_additional(adds.len() as u16);
+        self.additions = adds;
+    }
+}
+
+impl Packet {
     pub fn add_answer(&mut self, answer: RR) {
         self.answers.push(answer);
         self.header.set_answers(self.header.answer_count() + 1);
@@ -300,7 +408,7 @@ mod rr;
 mod integrated_test {
     use bytes::{BufMut, Bytes, BytesMut};
 
-    use crate::protocol::{header::Header, PacketContent, question::Question, RRClass, RRType};
+    use crate::protocol::{header::Header, question::Question, PacketContent, RRClass, RRType};
 
     #[test]
     fn parse_dns_lookup() {
@@ -367,11 +475,11 @@ mod integrated_test {
         let outcome = super::Packet::parse_packet(p, 0);
         assert!(outcome.is_ok());
         let pkt = outcome.unwrap();
-        assert_eq!(pkt.questions.len(), 1);
+        assert_eq!(pkt.question.is_some(), true);
         assert_eq!(pkt.answers.len(), 0);
         assert_eq!(pkt.authorities.len(), 0);
         assert_eq!(pkt.additions.len(), 0);
         assert_eq!(pkt.header.get_id(), 0);
-        assert_eq!(pkt.questions[0].get_name().to_string(), "example.com.");
+        assert_eq!(pkt.question.unwrap().get_name().to_string(), "example.com.");
     }
 }

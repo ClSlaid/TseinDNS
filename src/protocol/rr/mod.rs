@@ -138,8 +138,8 @@ fn rdata_parse(ty: RRType, packet: Bytes, offset: usize) -> Result<(RRData, usiz
 
 impl PacketContent for RR {
     fn parse(packet: bytes::Bytes, pos: usize) -> Result<Self, PacketError>
-    where
-        Self: Sized,
+        where
+            Self: Sized,
     {
         let mut p = packet.clone();
         let (domain, name_end) = Name::parse(packet.clone(), pos)?;

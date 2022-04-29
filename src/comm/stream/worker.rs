@@ -1,12 +1,13 @@
 use std::net::SocketAddr;
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::sync::oneshot::error::TryRecvError;
 use tokio::sync::{mpsc, oneshot};
+use tokio::sync::oneshot::error::TryRecvError;
 
-use super::{stream_fail, write_packet};
 use crate::comm::{Answer, Task};
 use crate::protocol::{Packet, PacketError, TransactionError};
+
+use super::{stream_fail, write_packet};
 
 pub enum Message {
     Update(SocketAddr),
@@ -14,8 +15,8 @@ pub enum Message {
 }
 
 pub(super) struct Worker<S>
-where
-    S: AsyncReadExt + AsyncWriteExt + Unpin + Send,
+    where
+        S: AsyncReadExt + AsyncWriteExt + Unpin + Send,
 {
     client: SocketAddr,
     stream: S,
@@ -28,8 +29,8 @@ where
 }
 
 impl<S> Worker<S>
-where
-    S: AsyncReadExt + AsyncWriteExt + Unpin + Send,
+    where
+        S: AsyncReadExt + AsyncWriteExt + Unpin + Send,
 {
     pub fn new(
         client: SocketAddr,
@@ -185,9 +186,10 @@ where
         tracing::info!("actor against {} shutdown", client);
     }
 }
+
 impl<S: 'static> Worker<S>
-where
-    S: AsyncReadExt + AsyncWriteExt + Unpin + Send,
+    where
+        S: AsyncReadExt + AsyncWriteExt + Unpin + Send,
 {
     pub fn serve(
         stream: S,

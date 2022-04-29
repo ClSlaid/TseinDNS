@@ -1,7 +1,7 @@
 use stretto::AsyncCache;
 use tokio::time;
 
-use crate::protocol::{Question, RR, RRData};
+use crate::protocol::{Question, RRData, RR};
 
 #[derive(Clone)]
 pub struct DnsCache {

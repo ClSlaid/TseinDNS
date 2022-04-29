@@ -1,11 +1,15 @@
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
+pub use service::Service;
+pub use tcp::TcpService;
+
 use crate::protocol::{Packet, PacketError, TransactionError};
 
+pub mod quic;
+pub mod service;
 pub mod tcp;
+pub mod tls;
 pub(crate) mod worker;
-
-pub use tcp::TcpService;
 
 /// use write_packet to write packet into TCP, TLS and IETF-QUIC streams
 pub async fn write_packet<S>(stream: &mut S, packet: Packet) -> Result<(), std::io::Error>

@@ -6,13 +6,13 @@ use std::time::Duration;
 use bytes::{Bytes, BytesMut};
 use rand::prelude::random;
 use tokio::net::UdpSocket;
-use tokio::sync::{mpsc, oneshot, Mutex, OnceCell};
+use tokio::sync::{mpsc, Mutex, OnceCell, oneshot};
 use tokio::time::timeout;
 use tracing;
 
-use crate::protocol::{Packet, PacketError, Question, TransactionError, RR};
-
 pub use stream::TcpService;
+
+use crate::protocol::{Packet, PacketError, Question, RR, TransactionError};
 
 pub(crate) mod forward;
 pub(crate) mod stream;

@@ -16,6 +16,79 @@ const ALI_DNS: &str = "223.5.5.5:53";
 
 const CACHE_SIZE: usize = 9192;
 
+async fn transaction(
+    mut tasks: mpsc::UnboundedReceiver<Task>,
+    rec_sender: mpsc::UnboundedSender<Task>,
+    cache: DnsCache,
+) {
+    tracing::info!("initiated transaction layer");
+
+    while let Some(task) = tasks.recv().await {
+        tracing::debug!("received task");
+
+        let rec_sender = rec_sender.clone();
+        match task {
+            Task::Query(query, ans_sender) => {
+                // looking up local cache
+                tracing::trace!("looking up local cache for query: {}", query.get_name());
+
+                if let Some((rdata, ddl)) = cache.get(query.clone()).await {
+                    // check if cached record is on-dated
+                    let now = time::Instant::now();
+                    if ddl > now {
+                        tracing::trace!(
+                            "looked up cache for query successfully: `{}`, type: `{}`",
+                            query.get_name(),
+                            query.get_type()
+                        );
+                        // calculate ttl
+                        let ttl = ddl.duration_since(now);
+                        let rr = RR::new(query.get_name(), ttl, RRClass::Internet, rdata);
+                        let ans = Answer::Answer(rr);
+                        ans_sender.send(ans).unwrap();
+                        continue;
+                    }
+                }
+
+                tracing::info!(
+                    "unable to lookup query locally: {}, forwarding...",
+                    query.get_name()
+                );
+                let (rec_query_sender, mut rec_ans_recv) = mpsc::unbounded_channel();
+
+                let mut forwarding_cache = cache.clone();
+                tokio::spawn(async move {
+                    rec_sender
+                        .send(Task::Query(query.clone(), rec_query_sender))
+                        .unwrap();
+                    let mut cached = false;
+                    while let Some(answer) = rec_ans_recv.recv().await {
+                        tracing::trace!("Get answer from upstream: {:?}", answer);
+                        // cache one answer only
+                        if !cached {
+                            tracing::trace!("caching answer from upstream");
+                            match answer.clone() {
+                                Answer::Error(_) => todo!(),
+                                Answer::Answer(rr) => {
+                                    forwarding_cache.insert_rr(query.clone(), rr).await;
+                                }
+                                Answer::NameServer(rr) => {
+                                    forwarding_cache.insert_rr(query.clone(), rr).await;
+                                }
+                                Answer::Additional(rr) => {
+                                    forwarding_cache.insert_rr(query.clone(), rr).await;
+                                }
+                            };
+                            cached = true;
+                        }
+                        ans_sender.send(answer).unwrap();
+                    }
+                });
+            }
+        };
+    }
+}
+
 #[instrument]
 #[tokio::main]
 async fn main() {
@@ -30,6 +103,7 @@ async fn main() {
         env!("CARGO_PKG_VERSION"),
         env!("CARGO_PKG_AUTHORS")
     );
+
     // init cache
     let cache = DnsCache::new(10 * CACHE_SIZE, (5 * CACHE_SIZE) as i64);
 
@@ -45,7 +119,7 @@ async fn main() {
 
     let udp_server = Arc::new(UdpService::new(udp_serve, forward));
     let forwarder = udp_server.clone();
-    let (udp_task_sender, mut task_recv) = mpsc::unbounded_channel();
+    let (udp_task_sender, task_recv) = mpsc::unbounded_channel();
     let tcp_task_sender = udp_task_sender.clone();
     let (rec_sender, rec_recv) = mpsc::unbounded_channel();
 
@@ -70,72 +144,7 @@ async fn main() {
 
     tracing::info!("init transaction");
     let transaction = tokio::spawn(async move {
-        tracing::info!("initiated transaction layer");
-
-        while let Some(task) = task_recv.recv().await {
-            tracing::debug!("received task");
-
-            let rec_sender = rec_sender.clone();
-            match task {
-                Task::Query(query, ans_sender) => {
-                    // looking up local cache
-                    tracing::trace!("looking up local cache for query: {}", query.get_name());
-
-                    if let Some((rdata, ddl)) = cache.get(query.clone()).await {
-                        // check if cached record is on-dated
-                        let now = time::Instant::now();
-                        if ddl > now {
-                            tracing::trace!(
-                                "looked up cache for query successfully: `{}`, type: `{}`",
-                                query.get_name(),
-                                query.get_type()
-                            );
-                            // calculate ttl
-                            let ttl = ddl.duration_since(now);
-                            let rr = RR::new(query.get_name(), ttl, RRClass::Internet, rdata);
-                            let ans = Answer::Answer(rr);
-                            ans_sender.send(ans).unwrap();
-                            continue;
-                        }
-                    }
-
-                    tracing::info!(
-                        "unable to lookup query locally: {}, forwarding...",
-                        query.get_name()
-                    );
-                    let (rec_query_sender, mut rec_ans_recv) = mpsc::unbounded_channel();
-
-                    let mut forwarding_cache = cache.clone();
-                    tokio::spawn(async move {
-                        rec_sender
-                            .send(Task::Query(query.clone(), rec_query_sender))
-                            .unwrap();
-                        let mut cached = false;
-                        while let Some(answer) = rec_ans_recv.recv().await {
-                            tracing::trace!("Get answer from upstream: {:?}", answer);
-                            // cache one answer only
-                            if !cached {
-                                tracing::trace!("caching answer from upstream");
-                                match answer.clone() {
-                                    Answer::Error(_) => todo!(),
-                                    Answer::Answer(rr) => {
-                                        forwarding_cache.insert_rr(query.clone(), rr).await;
-                                    }
-                                    Answer::NameServer(rr) => {
-                                        forwarding_cache.insert_rr(query.clone(), rr).await;
-                                    }
-                                    Answer::Additional(rr) => {
-                                        forwarding_cache.insert_rr(query.clone(), rr).await;
-                                    }
-                                };
-                                cached = true;
-                            }
-                            ans_sender.send(answer).unwrap();
-                        }
-                    });
-                }
-            };
-        }
+        transaction(task_recv, rec_sender, cache).await;
     });
 
     let (f, s, tc, t) = tokio::join!(udp_forwarding, udp_serving, tcp_serving, transaction);

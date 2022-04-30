@@ -20,8 +20,8 @@ pub trait Listener {
 }
 
 pub struct Service<L>
-    where
-        L: Listener + Send + Sync,
+where
+    L: Listener + Send + Sync,
 {
     listener: L,
     task: mpsc::UnboundedSender<Task>,
@@ -50,8 +50,8 @@ impl<L: 'static + Listener + Send + Sync> Service<L> {
     }
 
     pub async fn serve<S: 'static>(&mut self, client: SocketAddr, stream: S)
-        where
-            S: AsyncReadExt + AsyncWriteExt + Unpin + Send,
+    where
+        S: AsyncReadExt + AsyncWriteExt + Unpin + Send,
     {
         let task_sender = self.task.clone();
         let (tx, rx) = oneshot::channel();
@@ -67,38 +67,37 @@ impl<L: 'static + Listener + Send + Sync> Service<L> {
         let msg_sender = self.bell.clone();
         let pool = self.pool.clone();
 
-        let protocol_name = listener.name();
+        let protocol = listener.name();
+        let server_addr = format!("{}://{}", protocol, listener.local_addr().unwrap());
 
-        tracing::info!(
-            "starting tcp service on: {}",
-            listener.local_addr().unwrap()
-        );
+        tracing::info!("starting service on: {}", server_addr);
         let listening = tokio::spawn(async move {
             while let Ok((stream, client)) = listener.accept().await {
-                tracing::info!("incoming connection from {}://{}", protocol_name, client);
+                let client_uri = format!("{}://{}", listener.name(), client);
+                tracing::info!("incoming connection from {}", client_uri);
 
                 let task = task.clone();
                 let msg_sender = msg_sender.clone();
                 let handler = Worker::serve(stream, client, task, msg_sender);
                 pool.insert_with_ttl(client, handler, 1, std::time::Duration::from_secs(120))
                     .await;
-                tracing::debug!("worker for {}://{} started", protocol_name, client);
+                tracing::debug!("worker for {} started", client_uri);
             }
         });
         let mut msg = self.message;
         let pool = self.pool.clone();
 
-        tracing::info!("starting manage workers in {} service", protocol_name);
+        tracing::info!("starting manage workers in {} service", protocol);
         let updating = tokio::spawn(async move {
             while let Some(messages) = msg.recv().await {
                 match messages {
                     Message::Update(client) => {
-                        tracing::debug!("worker for {}://{} updated", protocol_name, client);
+                        tracing::debug!("worker for {}://{} updated", protocol, client);
                         pool.get(&client);
                     }
                     Message::ShutDown(client) => {
                         pool.remove(&client).await;
-                        tracing::info!("worker for {}://{} shutdown", protocol_name, client);
+                        tracing::info!("worker for {}://{} shutdown", protocol, client);
                     }
                 }
             }

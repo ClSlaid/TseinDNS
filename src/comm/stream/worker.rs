@@ -1,8 +1,8 @@
 use std::net::SocketAddr;
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::sync::{mpsc, oneshot};
 use tokio::sync::oneshot::error::TryRecvError;
+use tokio::sync::{mpsc, oneshot};
 
 use crate::comm::{Answer, Task};
 use crate::protocol::{Packet, PacketError, TransactionError};
@@ -15,8 +15,8 @@ pub enum Message {
 }
 
 pub(super) struct Worker<S>
-    where
-        S: AsyncReadExt + AsyncWriteExt + Unpin + Send,
+where
+    S: AsyncReadExt + AsyncWriteExt + Unpin + Send,
 {
     client: SocketAddr,
     stream: S,
@@ -29,8 +29,8 @@ pub(super) struct Worker<S>
 }
 
 impl<S> Worker<S>
-    where
-        S: AsyncReadExt + AsyncWriteExt + Unpin + Send,
+where
+    S: AsyncReadExt + AsyncWriteExt + Unpin + Send,
 {
     pub fn new(
         client: SocketAddr,
@@ -50,7 +50,7 @@ impl<S> Worker<S>
 
     pub async fn run(self) {
         let client = self.client;
-        tracing::info!("Actor against {} starting...", client);
+        tracing::debug!("Actor against {} starting...", client);
 
         let (mut rd, mut wr) = tokio::io::split(self.stream);
 
@@ -81,22 +81,23 @@ impl<S> Worker<S>
             if read.is_err() {
                 let err = read.unwrap_err();
 
-                // read to end of file in stream
-                // quit normally
                 if let TransactionError {
                     id: _,
                     error: PacketError::ServFail,
                 } = err
                 {
+                    // read to end of file in stream
+                    // quit normally
+                    tracing::trace!("connection from {} reaches its end", client);
                     break;
                 }
 
-                tracing::debug!("received malformed data {} from client {}", err, client);
+                tracing::warn!("received malformed data {} from client {}", err, client);
 
                 if stream_fail(&mut wr, err).await.is_err() || is_suspected {
                     // stream is closed by peer or the suspected client send corrupted message again
                     // quit directly
-                    tracing::debug!(
+                    tracing::warn!(
                         "actor against {} quit due to corrupted data or connection problems",
                         client
                     );
@@ -118,7 +119,7 @@ impl<S> Worker<S>
                 if write_packet(&mut wr, failure).await.is_err() || is_suspected {
                     // stream is closed by peer or the suspected client send malformed data again
                     // quit directly
-                    tracing::debug!(
+                    tracing::warn!(
                         "actor against {} quit due to malformed data or connection problems",
                         client
                     );
@@ -148,7 +149,7 @@ impl<S> Worker<S>
                         if stream_fail(&mut wr, err).await.is_err() {
                             // stream is closed by peer
                             // quit directly
-                            tracing::debug!(
+                            tracing::warn!(
                                 "actor against {} quit due to connection problems",
                                 client
                             );
@@ -177,19 +178,21 @@ impl<S> Worker<S>
             if write_packet(&mut wr, packet).await.is_err() {
                 // stream is closed by peer,
                 // quit directly
-                tracing::debug!("actor against {} quit due to connection problems", client);
+                tracing::warn!("actor against {} quit due to connection problems", client);
                 let msg = Message::ShutDown(client);
                 let _ = updater.send(msg);
                 return;
             }
         }
-        tracing::info!("actor against {} shutdown", client);
+        let msg = Message::ShutDown(client);
+        let _ = updater.send(msg);
+        tracing::debug!("actor against {} shutdown", client);
     }
 }
 
 impl<S: 'static> Worker<S>
-    where
-        S: AsyncReadExt + AsyncWriteExt + Unpin + Send,
+where
+    S: AsyncReadExt + AsyncWriteExt + Unpin + Send,
 {
     pub fn serve(
         stream: S,

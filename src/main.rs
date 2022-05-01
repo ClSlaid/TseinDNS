@@ -1,7 +1,7 @@
 // TODO: refract into a clap application
 use std::fs::File;
 use std::io::BufReader;
-use std::net::{IpAddr, Ipv6Addr, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 
 use rustls_pemfile::{certs, pkcs8_private_keys};
@@ -214,12 +214,15 @@ async fn run() {
     });
 
     tracing::info!("binding port 1953 as quic serving port");
-    let quic_serv = SocketAddr::new(IpAddr::from(Ipv6Addr::UNSPECIFIED), 1953);
+    let quic_serv = SocketAddr::new(IpAddr::from(Ipv4Addr::UNSPECIFIED), 1953);
     let quic_config = quinn::ServerConfig::with_crypto(serv_config);
-    let (_, incoming) = quinn::Endpoint::server(quic_config, quic_serv).unwrap();
+    let (endpoint, incoming) = quinn::Endpoint::server(quic_config, quic_serv).unwrap();
     let quic_server = QuicService::new(incoming, task_sender);
     let quic_serving = tokio::spawn(async move {
-        tracing::info!("initiated quic server");
+        tracing::info!(
+            "starting service on: quic://{}",
+            endpoint.local_addr().unwrap()
+        );
         quic_server.run().await
     });
 

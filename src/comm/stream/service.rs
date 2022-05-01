@@ -16,7 +16,7 @@ pub trait Listener {
     fn local_addr(&self) -> std::io::Result<SocketAddr>;
 
     // accept stream from listener
-    async fn accept(&self) -> std::io::Result<(Self::S, SocketAddr)>;
+    async fn acquire(&mut self) -> std::io::Result<(Self::S, SocketAddr)>;
 }
 
 pub struct Service<L>
@@ -62,7 +62,7 @@ impl<L: 'static + Listener + Send + Sync> Service<L> {
     }
 
     pub async fn run(self) {
-        let listener = self.listener;
+        let mut listener = self.listener;
         let task = self.task.clone();
         let msg_sender = self.bell.clone();
         let pool = self.pool.clone();
@@ -72,7 +72,7 @@ impl<L: 'static + Listener + Send + Sync> Service<L> {
 
         tracing::info!("starting service on: {}", server_addr);
         let listening = tokio::spawn(async move {
-            while let Ok((stream, client)) = listener.accept().await {
+            while let Ok((stream, client)) = listener.acquire().await {
                 let client_uri = format!("{}://{}", listener.name(), client);
                 tracing::info!("incoming connection from {}", client_uri);
 

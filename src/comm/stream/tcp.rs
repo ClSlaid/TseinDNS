@@ -20,7 +20,7 @@ impl Listener for TcpListener {
         self.local_addr()
     }
 
-    async fn accept(&self) -> std::io::Result<(Self::S, SocketAddr)> {
+    async fn acquire(&mut self) -> std::io::Result<(Self::S, SocketAddr)> {
         self.accept().await
     }
 }

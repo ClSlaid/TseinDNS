@@ -10,22 +10,22 @@ use tokio_rustls::TlsAcceptor;
 use super::service::Listener;
 use super::Service;
 
-pub type TlsService = Service<TlsOverTcpListener>;
+pub type TlsService = Service<TlsListener>;
 
-pub struct TlsOverTcpListener {
+pub struct TlsListener {
     listener: TcpListener,
     tls: TlsAcceptor,
 }
 
-impl TlsOverTcpListener {
-    pub fn new(listener: TcpListener, config: ServerConfig) -> Self {
-        let tls = TlsAcceptor::from(Arc::new(config));
+impl TlsListener {
+    pub fn new(listener: TcpListener, config: Arc<ServerConfig>) -> Self {
+        let tls = TlsAcceptor::from(config);
         Self { listener, tls }
     }
 }
 
 #[async_trait]
-impl Listener for TlsOverTcpListener {
+impl Listener for TlsListener {
     type S = TlsStream<TcpStream>;
 
     fn name(&self) -> &'static str {
@@ -36,7 +36,7 @@ impl Listener for TlsOverTcpListener {
         self.listener.local_addr()
     }
 
-    async fn accept(&self) -> std::io::Result<(Self::S, SocketAddr)> {
+    async fn acquire(&mut self) -> std::io::Result<(Self::S, SocketAddr)> {
         let (s, client) = self.listener.accept().await?;
         let tls = self.tls.accept(s).await?;
         Ok((tls, client))

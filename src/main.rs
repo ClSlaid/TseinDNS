@@ -1,11 +1,17 @@
+// TODO: refract into a clap application
+use std::fs::File;
+use std::io::BufReader;
 use std::sync::Arc;
 
+use rustls_pemfile::{certs, pkcs8_private_keys};
 use tokio::net::{TcpListener, UdpSocket};
 use tokio::sync::mpsc;
 use tokio::time;
+use tokio_rustls::rustls::{Certificate, PrivateKey};
 use tracing::instrument;
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
+use tsein_dns::comm::{TlsListener, TlsService};
 use tsein_dns::{
     cache::DnsCache,
     comm::{Answer, Task, TcpService, UdpService},
@@ -15,6 +21,21 @@ use tsein_dns::{
 const ALI_DNS: &str = "223.5.5.5:53";
 
 const CACHE_SIZE: usize = 9192;
+
+static KEY_PATH: &str = "secret/localhost+2-key.pem";
+static CERT_PATH: &str = "secret/localhost+2.pem";
+
+fn load_certs(path: &str) -> std::io::Result<Vec<Certificate>> {
+    certs(&mut BufReader::new(File::open(path)?))
+        .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidInput, "invalid cert"))
+        .map(|mut certs| certs.drain(..).map(Certificate).collect())
+}
+
+fn load_keys(path: &str) -> std::io::Result<Vec<PrivateKey>> {
+    pkcs8_private_keys(&mut BufReader::new(File::open(path)?))
+        .map_err(|_| std::io::Error::new(std::io::ErrorKind::InvalidInput, "invalid key"))
+        .map(|mut keys| keys.drain(..).map(PrivateKey).collect())
+}
 
 async fn transaction(
     mut tasks: mpsc::UnboundedReceiver<Task>,
@@ -107,10 +128,37 @@ async fn main() {
     // init cache
     let cache = DnsCache::new(10 * CACHE_SIZE, (5 * CACHE_SIZE) as i64);
 
+    // load ssl keys and certs
+    let mut keys = match load_keys(KEY_PATH) {
+        Ok(keys) => keys,
+        Err(e) => {
+            tracing::error!("cannot load keys from {}: {}", KEY_PATH, e);
+            return;
+        }
+    };
+    let certs = match load_certs(CERT_PATH) {
+        Ok(certs) => certs,
+        Err(e) => {
+            tracing::error!("cannot load certs from {}: {}", CERT_PATH, e);
+            return;
+        }
+    };
+
+    let serv_config = match rustls::ServerConfig::builder()
+        .with_safe_defaults()
+        .with_no_client_auth()
+        .with_single_cert(certs, keys.remove(0))
+    {
+        Ok(cfg) => Arc::new(cfg),
+        Err(e) => {
+            tracing::error!("cannot generate server config: {}", e);
+            return;
+        }
+    };
+
+    // init serving ports
     tracing::info!("binding port 1053 as udp serving port");
     let udp_serve = UdpSocket::bind("0.0.0.0:1053").await.unwrap();
-    tracing::info!("binding port 1053 as tcp serving port");
-    let tcp_serve = TcpListener::bind("0.0.0.0:1053").await.unwrap();
 
     tracing::info!("binding port 1054 as forwarding port");
     let forward = UdpSocket::bind("0.0.0.0:1054").await.unwrap();
@@ -119,8 +167,7 @@ async fn main() {
 
     let udp_server = Arc::new(UdpService::new(udp_serve, forward));
     let forwarder = udp_server.clone();
-    let (udp_task_sender, task_recv) = mpsc::unbounded_channel();
-    let tcp_task_sender = udp_task_sender.clone();
+    let (task_sender, task_recv) = mpsc::unbounded_channel();
     let (rec_sender, rec_recv) = mpsc::unbounded_channel();
 
     tracing::info!("init UDP forwarding...");
@@ -130,16 +177,28 @@ async fn main() {
     });
 
     tracing::info!("init UDP serving...");
+    let udp_task_sender = task_sender.clone();
     let udp_serving = tokio::spawn(async move {
         tracing::info!("initiated udp server");
         udp_server.clone().run_udp(udp_task_sender).await
     });
 
-    let tcp_server = TcpService::new(tcp_serve, tcp_task_sender, CACHE_SIZE);
+    tracing::info!("binding port 1053 as tcp serving port");
+    let tcp_serve = TcpListener::bind("0.0.0.0:1053").await.unwrap();
+    let tcp_server = TcpService::new(tcp_serve, task_sender.clone(), CACHE_SIZE);
     tracing::info!("init TCP serving...");
     let tcp_serving = tokio::spawn(async move {
         tracing::info!("initiated tcp server");
         tcp_server.run().await
+    });
+
+    tracing::info!("binding port 1853 as tls serving port");
+    let tls_underlay = TcpListener::bind("0.0.0.0:1853").await.unwrap();
+    let tls_serve = TlsListener::new(tls_underlay, serv_config);
+    let tls_server = TlsService::new(tls_serve, task_sender, CACHE_SIZE);
+    let tls_serving = tokio::spawn(async move {
+        tracing::info!("initiated tls server");
+        tls_server.run().await
     });
 
     tracing::info!("init transaction");
@@ -147,10 +206,17 @@ async fn main() {
         transaction(task_recv, rec_sender, cache).await;
     });
 
-    let (f, s, tc, t) = tokio::join!(udp_forwarding, udp_serving, tcp_serving, transaction);
+    let (f, s, do_tcp, do_tls, t) = tokio::join!(
+        udp_forwarding,
+        udp_serving,
+        tcp_serving,
+        tls_serving,
+        transaction
+    );
     f.unwrap().unwrap();
     s.unwrap().unwrap();
-    tc.unwrap();
+    do_tcp.unwrap();
+    do_tls.unwrap();
     t.unwrap();
     tracing::info!("quit service");
 }

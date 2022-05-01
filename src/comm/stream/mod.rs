@@ -2,10 +2,10 @@ use tokio::io::AsyncWriteExt;
 
 pub use service::Service;
 pub use tcp::TcpService;
+pub use tls::{TlsListener, TlsService};
 
 use crate::protocol::{Packet, PacketError, TransactionError};
 
-pub mod quic;
 pub mod service;
 pub mod tcp;
 pub mod tls;

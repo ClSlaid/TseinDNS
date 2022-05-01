@@ -49,7 +49,7 @@ where
             m_receiver,
         }
     }
-
+    // TODO: parallelize the reading and sending tasks, there is space for optimization
     pub async fn run(self) {
         let client = self.client;
         tracing::debug!("Actor against {} starting...", client);

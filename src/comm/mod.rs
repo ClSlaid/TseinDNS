@@ -10,7 +10,7 @@ use tokio::sync::{mpsc, oneshot, Mutex, OnceCell};
 use tokio::time::timeout;
 use tracing;
 
-pub use stream::{TcpService, TlsListener, TlsService};
+pub use stream::{QuicService, TcpService, TlsListener, TlsService};
 
 use crate::protocol::{Packet, PacketError, Question, TransactionError, RR};
 

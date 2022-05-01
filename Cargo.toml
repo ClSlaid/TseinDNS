@@ -13,6 +13,7 @@ rand = "0.8.5"
 bytes = "1.1.0"
 color-eyre = "0.6.1"
 stretto = { version = "0.4.2", features = ["async"] }
+quinn = "0.8.2"
 thiserror = "1.0.30"
 futures = "0.3.21"
 rustls = "0.20.4"

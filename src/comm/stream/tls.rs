@@ -2,6 +2,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use tokio::io::{ReadHalf, WriteHalf};
 use tokio::net::{TcpListener, TcpStream};
 use tokio_rustls::rustls::ServerConfig;
 use tokio_rustls::server::TlsStream;
@@ -26,7 +27,8 @@ impl TlsListener {
 
 #[async_trait]
 impl Listener for TlsListener {
-    type S = TlsStream<TcpStream>;
+    type R = ReadHalf<TlsStream<TcpStream>>;
+    type W = WriteHalf<TlsStream<TcpStream>>;
 
     fn name(&self) -> &'static str {
         "tls"
@@ -36,9 +38,10 @@ impl Listener for TlsListener {
         self.listener.local_addr()
     }
 
-    async fn acquire(&mut self) -> std::io::Result<(Self::S, SocketAddr)> {
+    async fn acquire(&mut self) -> std::io::Result<((Self::R, Self::W), SocketAddr)> {
         let (s, client) = self.listener.accept().await?;
         let tls = self.tls.accept(s).await?;
-        Ok((tls, client))
+        let split = tokio::io::split(tls);
+        Ok((split, client))
     }
 }

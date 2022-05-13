@@ -2,7 +2,7 @@ use bytes::{Buf, BufMut, Bytes, BytesMut};
 
 use crate::protocol::{domain::Name, error::PacketError};
 
-use super::{Rdata, try_into_rdata_length};
+use super::{try_into_rdata_length, Rdata};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Soa {

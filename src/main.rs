@@ -1,6 +1,7 @@
 // TODO: refract into a clap application
 use std::fs::File;
 use std::io::BufReader;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 
 use rustls_pemfile::{certs, pkcs8_private_keys};
@@ -14,7 +15,7 @@ use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt};
 use tsein_dns::comm::{TlsListener, TlsService};
 use tsein_dns::{
     cache::DnsCache,
-    comm::{Answer, Task, TcpService, UdpService},
+    comm::{Answer, QuicService, Task, TcpService, UdpService},
     protocol::{RRClass, RR},
 };
 
@@ -110,21 +111,32 @@ async fn transaction(
     }
 }
 
-#[instrument]
-#[tokio::main]
-async fn main() {
+fn main() {
     // init logger
-    let timer = fmt::time::SystemTime;
-    tracing_subscriber::registry()
-        .with(fmt::layer().with_timer(timer))
-        .init();
+    if let Ok(local_timer) = fmt::time::OffsetTime::local_rfc_3339() {
+        tracing_subscriber::registry()
+            .with(fmt::layer().with_timer(local_timer))
+            .init();
+    } else {
+        let sys_timer = fmt::time::SystemTime;
+        tracing_subscriber::registry()
+            .with(fmt::layer().with_timer(sys_timer))
+            .init();
+    }
     tracing::info!(
         "Starting {}, version {}, author {}",
         env!("CARGO_PKG_NAME"),
         env!("CARGO_PKG_VERSION"),
         env!("CARGO_PKG_AUTHORS")
     );
+    tracing::info!("initializing tokio runtime");
 
+    run();
+}
+
+#[instrument]
+#[tokio::main]
+async fn run() {
     // init cache
     let cache = DnsCache::new(10 * CACHE_SIZE, (5 * CACHE_SIZE) as i64);
 
@@ -156,7 +168,7 @@ async fn main() {
         }
     };
 
-    // init serving ports
+    // init UDP serving ports
     tracing::info!("binding port 1053 as udp serving port");
     let udp_serve = UdpSocket::bind("0.0.0.0:1053").await.unwrap();
 
@@ -194,11 +206,24 @@ async fn main() {
 
     tracing::info!("binding port 1853 as tls serving port");
     let tls_underlay = TcpListener::bind("0.0.0.0:1853").await.unwrap();
-    let tls_serve = TlsListener::new(tls_underlay, serv_config);
-    let tls_server = TlsService::new(tls_serve, task_sender, CACHE_SIZE);
+    let tls_serve = TlsListener::new(tls_underlay, serv_config.clone());
+    let tls_server = TlsService::new(tls_serve, task_sender.clone(), CACHE_SIZE);
     let tls_serving = tokio::spawn(async move {
         tracing::info!("initiated tls server");
         tls_server.run().await
+    });
+
+    tracing::info!("binding port 1953 as quic serving port");
+    let quic_serv = SocketAddr::new(IpAddr::from(Ipv4Addr::UNSPECIFIED), 1953);
+    let quic_config = quinn::ServerConfig::with_crypto(serv_config);
+    let (endpoint, incoming) = quinn::Endpoint::server(quic_config, quic_serv).unwrap();
+    let quic_server = QuicService::new(incoming, task_sender);
+    let quic_serving = tokio::spawn(async move {
+        tracing::info!(
+            "starting service on: quic://{}",
+            endpoint.local_addr().unwrap()
+        );
+        quic_server.run().await
     });
 
     tracing::info!("init transaction");
@@ -206,16 +231,18 @@ async fn main() {
         transaction(task_recv, rec_sender, cache).await;
     });
 
-    let (f, s, do_tcp, do_tls, t) = tokio::join!(
+    let (f, s, do_tcp, do_tls, do_quic, t) = tokio::join!(
         udp_forwarding,
         udp_serving,
         tcp_serving,
         tls_serving,
+        quic_serving,
         transaction
     );
     f.unwrap().unwrap();
     s.unwrap().unwrap();
     do_tcp.unwrap();
+    do_quic.unwrap();
     do_tls.unwrap();
     t.unwrap();
     tracing::info!("quit service");

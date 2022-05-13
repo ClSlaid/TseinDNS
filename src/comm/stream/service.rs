@@ -9,14 +9,15 @@ use crate::comm::Task;
 
 #[async_trait]
 pub trait Listener {
-    type S: AsyncReadExt + AsyncWriteExt + Unpin + Send;
+    type R: AsyncReadExt + Unpin + Send;
+    type W: AsyncWriteExt + Unpin + Send;
     // name of the protocol
     fn name(&self) -> &'static str;
     // get serving address and port
     fn local_addr(&self) -> std::io::Result<SocketAddr>;
 
     // accept stream from listener
-    async fn acquire(&mut self) -> std::io::Result<(Self::S, SocketAddr)>;
+    async fn acquire(&mut self) -> std::io::Result<((Self::R, Self::W), SocketAddr)>;
 }
 
 pub struct Service<L>
@@ -49,10 +50,16 @@ impl<L: 'static + Listener + Send + Sync> Service<L> {
         self.message.recv().await
     }
 
-    pub async fn serve<S: 'static>(&mut self, client: SocketAddr, stream: S)
-    where
-        S: AsyncReadExt + AsyncWriteExt + Unpin + Send,
+    pub async fn serve<R: 'static, W: 'static>(
+        &mut self,
+        client: SocketAddr,
+        read_stream: R,
+        write_stream: W,
+    ) where
+        R: AsyncReadExt + Unpin + Send,
+        W: AsyncWriteExt + Unpin + Send,
     {
+        let stream = (read_stream, write_stream);
         let task_sender = self.task.clone();
         let (tx, rx) = oneshot::channel();
         let bell = self.bell.clone();

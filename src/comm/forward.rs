@@ -13,10 +13,10 @@ pub async fn listening(forward: Arc<UdpSocket>, map: TaskMap) {
         if sz < 20 {
             // malformed packet
             tracing::debug!(
-                        "received malformed packet from upstream, length {}, data: {:?}",
-                        sz,
-                        buf
-                    );
+                "received malformed packet from upstream, length {}, data: {:?}",
+                sz,
+                buf
+            );
             continue;
         }
         let rs = Packet::parse_packet(buf.clone().into(), 0);
@@ -37,7 +37,10 @@ pub async fn listening(forward: Arc<UdpSocket>, map: TaskMap) {
                     }
                 }
             }
-            Err(TransactionError { id: Some(id), error }) => {
+            Err(TransactionError {
+                    id: Some(id),
+                    error,
+                }) => {
                 let err = vec![Answer::Error(error)];
                 {
                     let mut guard = map.lock().await;

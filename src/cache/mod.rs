@@ -28,7 +28,7 @@ impl DnsCache {
     }
 
     pub async fn append_rdata(&mut self, q: Question, data: RRData, ttl: u32) -> bool {
-        let time = std::time::Duration::from_secs(ttl as u64);
+        let time = time::Duration::from_secs(ttl as u64);
         let cost = (self.coster)(&data);
         let ddl = time::Instant::now() + time;
         let data = (data, ddl);

@@ -1,8 +1,8 @@
 use std::net::SocketAddr;
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::sync::oneshot::error::TryRecvError;
 use tokio::sync::{mpsc, oneshot};
+use tokio::sync::oneshot::error::TryRecvError;
 
 use crate::comm::{Answer, Task};
 use crate::protocol::{Packet, PacketError, TransactionError};
@@ -14,12 +14,13 @@ pub enum Message {
     ShutDown(SocketAddr),
 }
 
-pub(super) struct Worker<S>
-where
-    S: AsyncReadExt + AsyncWriteExt + Unpin + Send,
+pub(super) struct Worker<ReadHalf, WriteHalf>
+    where
+        ReadHalf: AsyncReadExt + Unpin + Send,
+        WriteHalf: AsyncWriteExt + Unpin + Send,
 {
     client: SocketAddr,
-    stream: S,
+    stream: (ReadHalf, WriteHalf),
     task_sender: mpsc::UnboundedSender<Task>,
     m_sender: mpsc::UnboundedSender<Message>,
 
@@ -28,13 +29,14 @@ where
     m_receiver: oneshot::Receiver<()>,
 }
 
-impl<S> Worker<S>
-where
-    S: AsyncReadExt + AsyncWriteExt + Unpin + Send,
+impl<R, W> Worker<R, W>
+    where
+        W: AsyncWriteExt + Unpin + Send,
+        R: AsyncReadExt + Unpin + Send,
 {
     pub fn new(
         client: SocketAddr,
-        stream: S,
+        stream: (R, W),
         task_sender: mpsc::UnboundedSender<Task>,
         m_sender: mpsc::UnboundedSender<Message>,
         m_receiver: oneshot::Receiver<()>,
@@ -47,12 +49,12 @@ where
             m_receiver,
         }
     }
-
+    // TODO: parallelize the reading and sending tasks, there is space for optimization
     pub async fn run(self) {
         let client = self.client;
         tracing::debug!("Actor against {} starting...", client);
 
-        let (mut rd, mut wr) = tokio::io::split(self.stream);
+        let (mut rd, mut wr) = self.stream;
 
         // if the packet from a client failed too many times
         // take caution
@@ -190,12 +192,13 @@ where
     }
 }
 
-impl<S: 'static> Worker<S>
-where
-    S: AsyncReadExt + AsyncWriteExt + Unpin + Send,
+impl<R: 'static, W: 'static> Worker<R, W>
+    where
+        R: AsyncReadExt + Unpin + Send,
+        W: AsyncWriteExt + Unpin + Send,
 {
     pub fn serve(
-        stream: S,
+        stream: (R, W),
         client: SocketAddr,
         task_sender: mpsc::UnboundedSender<Task>,
         msg_sender: mpsc::UnboundedSender<Message>,

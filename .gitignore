@@ -1,9 +1,12 @@
 # developments
 /.vscode
 /.idea
+/.cargo
 
 # secret files such as keys
 /secret
 
 # target files
 /target
+
+fleet.toml

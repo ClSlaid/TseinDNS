@@ -1,11 +1,13 @@
 use tokio::io::AsyncWriteExt;
 
+pub use quic::QuicService;
 pub use service::Service;
 pub use tcp::TcpService;
 pub use tls::{TlsListener, TlsService};
 
 use crate::protocol::{Packet, PacketError, TransactionError};
 
+pub mod quic;
 pub mod service;
 pub mod tcp;
 pub mod tls;
@@ -13,8 +15,8 @@ pub(crate) mod worker;
 
 /// use write_packet to write packet into TCP, TLS and IETF-QUIC streams
 pub async fn write_packet<S>(stream: &mut S, packet: Packet) -> Result<(), std::io::Error>
-where
-    S: AsyncWriteExt + Unpin,
+    where
+        S: AsyncWriteExt + Unpin,
 {
     let id = packet.get_id();
     let buf = packet.into_bytes();
@@ -34,8 +36,8 @@ pub(crate) async fn stream_fail<S>(
     stream: &mut S,
     err: TransactionError,
 ) -> Result<(), std::io::Error>
-where
-    S: AsyncWriteExt + Unpin,
+    where
+        S: AsyncWriteExt + Unpin,
 {
     let TransactionError { id, error } = err;
     let id = id.unwrap_or(0);

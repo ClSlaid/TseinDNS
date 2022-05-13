@@ -8,15 +8,15 @@ pub use self::{
     error::{PacketError, TransactionError},
     header::Header,
     question::Question,
-    rr::RRData,
     rr::RR,
+    rr::RRData,
 };
 
 trait PacketContent {
     fn size(&self) -> usize;
     fn parse(packet: Bytes, pos: usize) -> Result<Self, PacketError>
-    where
-        Self: Sized;
+        where
+            Self: Sized;
     fn into_bytes(self) -> Result<BytesMut, PacketError>;
 }
 
@@ -117,8 +117,8 @@ impl Packet {
     }
 
     pub async fn parse_stream<S>(stream: &mut S) -> Result<Self, TransactionError>
-    where
-        S: AsyncReadExt + Unpin,
+        where
+            S: AsyncReadExt + Unpin,
     {
         tracing::trace!("parsing packet from stream");
         let len = stream.read_u16().await.map_err(|_| TransactionError {
@@ -408,7 +408,7 @@ mod rr;
 mod integrated_test {
     use bytes::{BufMut, Bytes, BytesMut};
 
-    use crate::protocol::{header::Header, question::Question, PacketContent, RRClass, RRType};
+    use crate::protocol::{header::Header, PacketContent, question::Question, RRClass, RRType};
 
     #[test]
     fn parse_dns_lookup() {

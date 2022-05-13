@@ -195,8 +195,8 @@ impl Header {
 
 impl Header {
     pub(crate) fn parse(packet: Bytes, pos: usize) -> Result<Self, TransactionError>
-    where
-        Self: Sized,
+        where
+            Self: Sized,
     {
         let mut buf = packet;
         if buf.len() - pos < 12 {
@@ -255,8 +255,8 @@ impl Header {
     }
 
     pub async fn parse_stream<S>(stream: &mut S) -> Result<Self, TransactionError>
-    where
-        S: AsyncReadExt + Unpin,
+        where
+            S: AsyncReadExt + Unpin,
     {
         let error = PacketError::FormatError;
         let id = stream
@@ -408,7 +408,7 @@ mod test {
         packet.put_u16(0); // ANCOUNT = 0;
         packet.put_u16(0); // NSCOUNT = 0;
         packet.put_u16(0); // ARCOUNT = 0;
-                           // creat question
+        // creat question
 
         let h_packet = Bytes::from(packet);
 

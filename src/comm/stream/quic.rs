@@ -4,8 +4,8 @@ use futures::StreamExt;
 use quinn::{Incoming, RecvStream, SendStream};
 use tokio::sync::mpsc;
 
-use crate::comm::stream::{stream_fail, write_packet};
 use crate::comm::{Answer, Task};
+use crate::comm::stream::{stream_fail, write_packet};
 use crate::protocol::{Packet, PacketError, TransactionError};
 
 pub struct QuicService {
@@ -49,9 +49,9 @@ async fn worker(
     loop {
         let pkt = match Packet::parse_stream(&mut recv).await {
             Err(TransactionError {
-                id: _,
-                error: PacketError::ServFail,
-            }) => {
+                    id: _,
+                    error: PacketError::ServFail,
+                }) => {
                 // read to end of file, quit
                 tracing::debug!(
                     "stream {} from quic:://{} reaches end of file",

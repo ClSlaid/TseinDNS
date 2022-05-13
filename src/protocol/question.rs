@@ -46,8 +46,8 @@ impl PacketContent for Question {
     }
 
     fn parse(packet: bytes::Bytes, pos: usize) -> Result<Self, PacketError>
-        where
-            Self: Sized,
+    where
+        Self: Sized,
     {
         let (name, end) = Name::parse(packet.clone(), pos)?;
         let mut p = packet;

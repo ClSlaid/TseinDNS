@@ -1,8 +1,8 @@
 use std::net::SocketAddr;
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::sync::oneshot::error::TryRecvError;
 use tokio::sync::{mpsc, oneshot};
+use tokio::sync::oneshot::error::TryRecvError;
 
 use crate::comm::{Answer, Task};
 use crate::protocol::{Packet, PacketError, TransactionError};
@@ -15,9 +15,9 @@ pub enum Message {
 }
 
 pub(super) struct Worker<ReadHalf, WriteHalf>
-where
-    ReadHalf: AsyncReadExt + Unpin + Send,
-    WriteHalf: AsyncWriteExt + Unpin + Send,
+    where
+        ReadHalf: AsyncReadExt + Unpin + Send,
+        WriteHalf: AsyncWriteExt + Unpin + Send,
 {
     client: SocketAddr,
     stream: (ReadHalf, WriteHalf),
@@ -30,9 +30,9 @@ where
 }
 
 impl<R, W> Worker<R, W>
-where
-    W: AsyncWriteExt + Unpin + Send,
-    R: AsyncReadExt + Unpin + Send,
+    where
+        W: AsyncWriteExt + Unpin + Send,
+        R: AsyncReadExt + Unpin + Send,
 {
     pub fn new(
         client: SocketAddr,
@@ -193,9 +193,9 @@ where
 }
 
 impl<R: 'static, W: 'static> Worker<R, W>
-where
-    R: AsyncReadExt + Unpin + Send,
-    W: AsyncWriteExt + Unpin + Send,
+    where
+        R: AsyncReadExt + Unpin + Send,
+        W: AsyncWriteExt + Unpin + Send,
 {
     pub fn serve(
         stream: (R, W),

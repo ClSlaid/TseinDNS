@@ -8,8 +8,8 @@ use tokio_rustls::rustls::ServerConfig;
 use tokio_rustls::server::TlsStream;
 use tokio_rustls::TlsAcceptor;
 
-use super::service::Listener;
 use super::Service;
+use super::service::Listener;
 
 pub type TlsService = Service<TlsListener>;
 

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use bytes::BytesMut;
-use tokio::net::UdpSocket;
+use tokio::net::{TcpStream, UdpSocket};
 use tracing;
 
 use crate::comm::{Answer, TaskMap};
@@ -38,9 +38,9 @@ pub async fn listening(forward: Arc<UdpSocket>, map: TaskMap) {
                 }
             }
             Err(TransactionError {
-                    id: Some(id),
-                    error,
-                }) => {
+                id: Some(id),
+                error,
+            }) => {
                 let err = vec![Answer::Error(error)];
                 {
                     let mut guard = map.lock().await;

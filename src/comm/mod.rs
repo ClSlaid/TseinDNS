@@ -14,6 +14,7 @@ pub use stream::{QuicService, TcpService, TlsListener, TlsService};
 
 use crate::protocol::{Packet, PacketError, Question, TransactionError, RR};
 
+pub mod client;
 pub(crate) mod forward;
 pub(crate) mod stream;
 
@@ -56,6 +57,7 @@ impl UdpService {
         }
     }
 
+    #[warn(deprecated_in_future)]
     pub async fn run_forward(
         self: Arc<Self>,
         mut recur_receiver: mpsc::UnboundedReceiver<Task>,
@@ -152,7 +154,7 @@ impl UdpService {
             // validate packet
             if n < 12 {
                 tracing::debug!("received malformed packet from {}", client);
-                tracing::trace!("packet length: {}, data: {:?}", n, packet);
+                tracing::debug!("packet length: {}, data: {:?}", n, packet);
                 // ignore
                 continue;
             }

@@ -1,25 +1,24 @@
 // TODO: refract into a clap application
 use std::fs::File;
 use std::io::BufReader;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV6};
 use std::sync::Arc;
 
 use rustls_pemfile::{certs, pkcs8_private_keys};
 use tokio::net::{TcpListener, UdpSocket};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, OnceCell};
 use tokio::time;
 use tokio_rustls::rustls::{Certificate, PrivateKey};
 use tracing::instrument;
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
+use tsein_dns::comm::client::QuicForwarder;
 use tsein_dns::comm::{TlsListener, TlsService};
 use tsein_dns::{
     cache::DnsCache,
     comm::{Answer, QuicService, Task, TcpService, UdpService},
     protocol::{RRClass, RR},
 };
-
-const ALI_DNS: &str = "223.5.5.5:53";
 
 const CACHE_SIZE: usize = 9192;
 
@@ -131,12 +130,18 @@ fn main() {
     );
     tracing::info!("initializing tokio runtime");
 
-    run();
+    let upstream_domain: &str = "dns-unfiltered.adguard.com";
+    let upstream_addr: SocketAddr = SocketAddr::new(
+        IpAddr::from(Ipv6Addr::new(0x2a10, 0x50c0, 0, 0, 0, 0, 0x1, 0xff)),
+        853,
+    );
+
+    run(upstream_domain, upstream_addr);
 }
 
-#[instrument]
+#[instrument(level = "debug")]
 #[tokio::main]
-async fn run() {
+async fn run(upstream_domain: &'static str, upstream_addr: SocketAddr) {
     // init cache
     let cache = DnsCache::new(10 * CACHE_SIZE, (5 * CACHE_SIZE) as i64);
 
@@ -156,6 +161,13 @@ async fn run() {
         }
     };
 
+    let mut roots = rustls::RootCertStore::empty();
+    for cert in
+        rustls_native_certs::load_native_certs().expect("failed to read system native certificates")
+    {
+        roots.add(&Certificate(cert.0)).unwrap();
+    }
+
     let serv_config = match rustls::ServerConfig::builder()
         .with_safe_defaults()
         .with_no_client_auth()
@@ -171,22 +183,22 @@ async fn run() {
     // init UDP serving ports
     tracing::info!("binding port 1053 as udp serving port");
     let udp_serve = UdpSocket::bind("0.0.0.0:1053").await.unwrap();
-
-    tracing::info!("binding port 1054 as forwarding port");
     let forward = UdpSocket::bind("0.0.0.0:1054").await.unwrap();
-    tracing::info!("Setting up {} as upstream", ALI_DNS);
-    forward.connect(ALI_DNS).await.unwrap();
 
     let udp_server = Arc::new(UdpService::new(udp_serve, forward));
-    let forwarder = udp_server.clone();
+
+    // tasks received from downstream
     let (task_sender, task_recv) = mpsc::unbounded_channel();
+
+    // recursive lookup
     let (rec_sender, rec_recv) = mpsc::unbounded_channel();
 
-    tracing::info!("init UDP forwarding...");
-    let udp_forwarding = tokio::spawn(async move {
-        tracing::info!("initiated forwarder");
-        forwarder.run_forward(rec_recv).await
-    });
+    // deprecated udp forward service
+    // tracing::info!("init UDP forwarding...");
+    // let udp_forwarding = tokio::spawn(async move {
+    // tracing::info!("initiated forwarder");
+    // forwarder.run_forward(rec_recv).await
+    // });
 
     tracing::info!("init UDP serving...");
     let udp_task_sender = task_sender.clone();
@@ -216,7 +228,7 @@ async fn run() {
     tracing::info!("binding port 1953 as quic serving port");
     let quic_serv = SocketAddr::new(IpAddr::from(Ipv4Addr::UNSPECIFIED), 1953);
     let quic_config = quinn::ServerConfig::with_crypto(serv_config);
-    let (endpoint, incoming) = quinn::Endpoint::server(quic_config, quic_serv).unwrap();
+    let (endpoint, incoming) = quinn::Endpoint::server(quic_config.clone(), quic_serv).unwrap();
     let quic_server = QuicService::new(incoming, task_sender);
     let quic_serving = tokio::spawn(async move {
         tracing::info!(
@@ -226,13 +238,24 @@ async fn run() {
         quic_server.run().await
     });
 
+    tracing::info!("binding port 1954 as quic forwarding port");
+    let forward = SocketAddr::new(IpAddr::from(Ipv6Addr::UNSPECIFIED), 1954);
+    let quic_config = quinn::ClientConfig::with_root_certificates(roots);
+    let mut endpoint = quinn::Endpoint::client(forward).unwrap();
+    endpoint.set_default_client_config(quic_config);
+    let forwarder = QuicForwarder::try_new(rec_recv, endpoint, upstream_domain, upstream_addr)
+        .await
+        .unwrap();
+    tracing::info!("init forward");
+    let forwarding = tokio::spawn(forwarder.run());
+
     tracing::info!("init transaction");
     let transaction = tokio::spawn(async move {
         transaction(task_recv, rec_sender, cache).await;
     });
 
     let (f, s, do_tcp, do_tls, do_quic, t) = tokio::join!(
-        udp_forwarding,
+        forwarding,
         udp_serving,
         tcp_serving,
         tls_serving,

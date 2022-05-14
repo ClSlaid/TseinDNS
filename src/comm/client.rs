@@ -20,7 +20,7 @@ pub struct QuicForwarder {
 impl QuicForwarder {
     pub async fn try_new(
         rec: mpsc::UnboundedReceiver<Task>,
-        endpoint: quinn::Endpoint,
+        endpoint: Endpoint,
         domain: &'static str,
         addr: SocketAddr,
     ) -> Result<Self> {
@@ -48,19 +48,10 @@ impl QuicForwarder {
             tracing::debug!("sending packet {:?} to quic://{}", packet, remote);
 
             let packet_bytes = packet.into_bytes();
-            if let Err(e) = quic_send.write_u16(packet_bytes.len() as u16).await {
-                tracing::warn!(
-                    "QUIC forward to quic://{} failed with write error! {}",
-                    remote,
-                    e
-                );
-                continue;
-            }
             if let Err(e) = quic_send.write_all(&packet_bytes[..]).await {
                 tracing::warn!("QUIC forward to quic://{} failed with write error!", remote);
                 continue;
             }
-            tracing::debug!("packet sent to upstream");
 
             let checker = tokio::spawn(async move {
                 let stream_id = quic_recv.id();
@@ -68,8 +59,7 @@ impl QuicForwarder {
                     .read_to_end(u16::MAX as usize)
                     .await
                     .expect("failed read to end");
-                let mut buf = Bytes::from(v);
-                let _len = buf.get_u16();
+                let buf = Bytes::from(v);
                 let r = Packet::parse_packet(buf, 0);
                 tracing::debug!("received response {:?} on quic stream", r);
                 if let Err(..) = r {
@@ -100,6 +90,8 @@ impl QuicForwarder {
                     let _ = ans_to.send(Answer::Additional(addi));
                 }
             });
+            let _ = quic_send.finish().await;
+            tracing::debug!("packet sent to upstream");
             checkers.push(checker);
         }
         for checker in checkers {

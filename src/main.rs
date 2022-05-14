@@ -149,7 +149,7 @@ fn main() {
     run(upstream_domain, upstream_addr);
 }
 
-#[instrument(level = "debug")]
+#[instrument]
 #[tokio::main]
 async fn run(upstream_domain: &'static str, upstream_addr: SocketAddr) {
     // init cache
@@ -242,8 +242,8 @@ async fn run(upstream_domain: &'static str, upstream_addr: SocketAddr) {
         tls_server.run().await
     });
 
-    tracing::info!("binding port 1953 as quic serving port");
-    let quic_serv = SocketAddr::new(IpAddr::from(Ipv4Addr::UNSPECIFIED), 1953);
+    tracing::info!("binding port 1853 as quic serving port");
+    let quic_serv = SocketAddr::new(IpAddr::from(Ipv4Addr::UNSPECIFIED), 1853);
     let quic_config = quinn::ServerConfig::with_crypto(serv_config);
     let (endpoint, incoming) = quinn::Endpoint::server(quic_config.clone(), quic_serv).unwrap();
     let quic_server = QuicService::new(incoming, task_sender);
@@ -255,8 +255,8 @@ async fn run(upstream_domain: &'static str, upstream_addr: SocketAddr) {
         quic_server.run().await
     });
 
-    tracing::info!("binding port 1954 as quic forwarding port");
-    let forward = SocketAddr::new(IpAddr::from(Ipv6Addr::UNSPECIFIED), 1954);
+    tracing::info!("binding port 1854 as quic forwarding port");
+    let forward = SocketAddr::new(IpAddr::from(Ipv6Addr::UNSPECIFIED), 1854);
     let quic_config = rustls::ClientConfig::builder()
         .with_safe_defaults()
         .with_root_certificates(roots)

@@ -1,3 +1,9 @@
+// Copyright (c) 2022 ClSlaid <cailue@bupt.edu.cn>
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
 use std::fmt::{Debug, Display, Write};
 
 use bytes::{BufMut, Bytes, BytesMut};
@@ -93,8 +99,8 @@ impl Name {
     ///
     /// If err, return `PacketError::FormatError`
     pub fn parse(packet: Bytes, pos: usize) -> Result<(Self, usize), PacketError>
-        where
-            Self: Sized,
+    where
+        Self: Sized,
     {
         let mut pos = pos;
         const MAX_JUMPS: usize = 5;
@@ -232,8 +238,7 @@ impl Display for Name {
 mod domain_test {
     use bytes::{Buf, BufMut, Bytes, BytesMut};
 
-    use super::Name;
-    use super::PTR_MASK;
+    use super::{Name, PTR_MASK};
 
     #[test]
     fn test_len() {

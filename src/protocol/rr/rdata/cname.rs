@@ -1,10 +1,15 @@
+// Copyright (c) 2022 ClSlaid <cailue@bupt.edu.cn>
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
 use std::fmt::Display;
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
+use super::{try_into_rdata_length, Name, Rdata};
 use crate::protocol::error::PacketError;
-
-use super::{Name, Rdata, try_into_rdata_length};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Cname {
@@ -13,8 +18,8 @@ pub struct Cname {
 
 impl Rdata for Cname {
     fn parse(packet: Bytes, pos: usize) -> Result<(Self, usize), PacketError>
-        where
-            Self: Sized,
+    where
+        Self: Sized,
     {
         if pos + 4 > packet.len() {
             return Err(PacketError::FormatError);

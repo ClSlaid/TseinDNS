@@ -1,14 +1,23 @@
-use bytes::Bytes;
+// Copyright (c) 2022 ClSlaid <cailue@bupt.edu.cn>
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
 use std::net::SocketAddr;
 
+use bytes::Bytes;
 use futures::StreamExt;
 use quinn::{Incoming, RecvStream, SendStream};
-use tokio::io::AsyncReadExt;
-use tokio::sync::mpsc;
+use tokio::{io::AsyncReadExt, sync::mpsc};
 
-use crate::comm::stream::{stream_fail, write_packet};
-use crate::comm::{Answer, Task};
-use crate::protocol::{Packet, PacketError, TransactionError};
+use crate::{
+    comm::{
+        stream::{stream_fail, write_packet},
+        Answer, Task,
+    },
+    protocol::{Packet, PacketError, TransactionError},
+};
 
 pub struct QuicService {
     listener: Incoming,

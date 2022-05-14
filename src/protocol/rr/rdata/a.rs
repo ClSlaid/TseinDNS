@@ -1,10 +1,15 @@
+// Copyright (c) 2022 ClSlaid <cailue@bupt.edu.cn>
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
 use std::{fmt::Display, net::Ipv4Addr};
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 
-use crate::protocol::error::PacketError;
-
 use super::Rdata;
+use crate::protocol::error::PacketError;
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub struct A {

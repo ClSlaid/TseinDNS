@@ -1,11 +1,19 @@
+// Copyright (c) 2022 ClSlaid <cailue@bupt.edu.cn>
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
 use std::sync::Arc;
 
 use bytes::BytesMut;
 use tokio::net::UdpSocket;
 use tracing;
 
-use crate::comm::{Answer, TaskMap};
-use crate::protocol::{Packet, TransactionError};
+use crate::{
+    comm::{Answer, TaskMap},
+    protocol::{Packet, TransactionError},
+};
 
 pub async fn listening(forward: Arc<UdpSocket>, map: TaskMap) {
     let mut buf = BytesMut::from(&[0_u8; 1024][..]);
@@ -38,9 +46,9 @@ pub async fn listening(forward: Arc<UdpSocket>, map: TaskMap) {
                 }
             }
             Err(TransactionError {
-                    id: Some(id),
-                    error,
-                }) => {
+                id: Some(id),
+                error,
+            }) => {
                 let err = vec![Answer::Error(error)];
                 {
                     let mut guard = map.lock().await;

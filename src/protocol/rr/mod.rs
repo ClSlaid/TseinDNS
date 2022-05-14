@@ -1,11 +1,15 @@
+// Copyright (c) 2022 ClSlaid <cailue@bupt.edu.cn>
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
 use bytes::{Buf, BufMut, Bytes, BytesMut};
+use rdata::{a::A, aaaa::Aaaa, cname::Cname, mx::Mx, ns::Ns, soa::Soa, unknown::Unknown, Rdata};
 use tokio::time;
 
-use rdata::{a::A, aaaa::Aaaa, cname::Cname, mx::Mx, ns::Ns, Rdata, soa::Soa, unknown::Unknown};
-
-use crate::protocol::{PacketContent, RRType};
-
 use super::{domain::Name, error::PacketError, RRClass};
+use crate::protocol::{PacketContent, RRType};
 
 mod rdata;
 
@@ -138,8 +142,8 @@ fn rdata_parse(ty: RRType, packet: Bytes, offset: usize) -> Result<(RRData, usiz
 
 impl PacketContent for RR {
     fn parse(packet: bytes::Bytes, pos: usize) -> Result<Self, PacketError>
-        where
-            Self: Sized,
+    where
+        Self: Sized,
     {
         let mut p = packet.clone();
         let (domain, name_end) = Name::parse(packet.clone(), pos)?;

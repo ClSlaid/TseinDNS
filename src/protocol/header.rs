@@ -1,5 +1,10 @@
-use std::fmt::Debug;
-use std::fmt::Display;
+// Copyright (c) 2022 ClSlaid <cailue@bupt.edu.cn>
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+use std::fmt::{Debug, Display};
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use tokio::io::AsyncReadExt;
@@ -195,8 +200,8 @@ impl Header {
 
 impl Header {
     pub(crate) fn parse(packet: Bytes, pos: usize) -> Result<Self, TransactionError>
-        where
-            Self: Sized,
+    where
+        Self: Sized,
     {
         let mut buf = packet;
         if buf.len() - pos < 12 {
@@ -255,8 +260,8 @@ impl Header {
     }
 
     pub async fn parse_stream<S>(stream: &mut S) -> Result<Self, TransactionError>
-        where
-            S: AsyncReadExt + Unpin,
+    where
+        S: AsyncReadExt + Unpin,
     {
         let error = PacketError::FormatError;
         let id = stream
@@ -396,8 +401,9 @@ pub_map_enum! {
 mod test {
     #[test]
     fn test_parse_header() {
-        use super::{Op, Rcode};
         use bytes::{BufMut, Bytes, BytesMut};
+
+        use super::{Op, Rcode};
 
         let mut packet = BytesMut::new();
         // create header
@@ -408,7 +414,7 @@ mod test {
         packet.put_u16(0); // ANCOUNT = 0;
         packet.put_u16(0); // NSCOUNT = 0;
         packet.put_u16(0); // ARCOUNT = 0;
-        // creat question
+                           // creat question
 
         let h_packet = Bytes::from(packet);
 

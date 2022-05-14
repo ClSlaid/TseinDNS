@@ -1,13 +1,21 @@
+// Copyright (c) 2022 ClSlaid <cailue@bupt.edu.cn>
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
 use std::net::SocketAddr;
 
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::sync::{mpsc, oneshot};
-use tokio::sync::oneshot::error::TryRecvError;
-
-use crate::comm::{Answer, Task};
-use crate::protocol::{Packet, PacketError, TransactionError};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    sync::{mpsc, oneshot, oneshot::error::TryRecvError},
+};
 
 use super::{stream_fail, write_packet};
+use crate::{
+    comm::{Answer, Task},
+    protocol::{Packet, PacketError, TransactionError},
+};
 
 pub enum Message {
     Update(SocketAddr),
@@ -15,9 +23,9 @@ pub enum Message {
 }
 
 pub(super) struct Worker<ReadHalf, WriteHalf>
-    where
-        ReadHalf: AsyncReadExt + Unpin + Send,
-        WriteHalf: AsyncWriteExt + Unpin + Send,
+where
+    ReadHalf: AsyncReadExt + Unpin + Send,
+    WriteHalf: AsyncWriteExt + Unpin + Send,
 {
     client: SocketAddr,
     stream: (ReadHalf, WriteHalf),
@@ -30,9 +38,9 @@ pub(super) struct Worker<ReadHalf, WriteHalf>
 }
 
 impl<R, W> Worker<R, W>
-    where
-        W: AsyncWriteExt + Unpin + Send,
-        R: AsyncReadExt + Unpin + Send,
+where
+    W: AsyncWriteExt + Unpin + Send,
+    R: AsyncReadExt + Unpin + Send,
 {
     pub fn new(
         client: SocketAddr,
@@ -193,9 +201,9 @@ impl<R, W> Worker<R, W>
 }
 
 impl<R: 'static, W: 'static> Worker<R, W>
-    where
-        R: AsyncReadExt + Unpin + Send,
-        W: AsyncWriteExt + Unpin + Send,
+where
+    R: AsyncReadExt + Unpin + Send,
+    W: AsyncWriteExt + Unpin + Send,
 {
     pub fn serve(
         stream: (R, W),

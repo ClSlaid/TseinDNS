@@ -1,21 +1,29 @@
+// Copyright (c) 2022 ClSlaid <cailue@bupt.edu.cn>
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
 // TODO: refract into a clap application
-use std::fs::File;
-use std::io::BufReader;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::sync::Arc;
+use std::{
+    fs::File,
+    io::BufReader,
+    net::{IpAddr, Ipv4Addr, SocketAddr},
+    sync::Arc,
+};
 
 use rustls_pemfile::{certs, pkcs8_private_keys};
-use tokio::net::{TcpListener, UdpSocket};
-use tokio::sync::mpsc;
-use tokio::time;
+use tokio::{
+    net::{TcpListener, UdpSocket},
+    sync::mpsc,
+    time,
+};
 use tokio_rustls::rustls::{Certificate, PrivateKey};
 use tracing::instrument;
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt};
-
-use tsein_dns::comm::{TlsListener, TlsService};
 use tsein_dns::{
     cache::DnsCache,
-    comm::{Answer, QuicService, Task, TcpService, UdpService},
+    comm::{Answer, QuicService, Task, TcpService, TlsListener, TlsService, UdpService},
     protocol::{RRClass, RR},
 };
 

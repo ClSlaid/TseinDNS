@@ -1,11 +1,21 @@
+// Copyright (c) 2022 ClSlaid <cailue@bupt.edu.cn>
+//
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
 use std::net::SocketAddr;
 
 use async_trait::async_trait;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::sync::{mpsc, oneshot};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    sync::{mpsc, oneshot},
+};
 
-use crate::comm::stream::worker::{Message, Worker};
-use crate::comm::Task;
+use crate::comm::{
+    stream::worker::{Message, Worker},
+    Task,
+};
 
 #[async_trait]
 pub trait Listener {

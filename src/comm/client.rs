@@ -1,14 +1,11 @@
 use std::net::SocketAddr;
 
 use anyhow::Result;
-use bytes::{Buf, Bytes};
-use futures::AsyncReadExt;
-use quinn::{ClientConfig, Connection, Endpoint, NewConnection, OpenBi, RecvStream, SendStream};
+use bytes::Bytes;
+use quinn::{Connection, Endpoint, NewConnection, RecvStream, SendStream};
 use rand::random;
-use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc;
 
-use crate::comm::stream::write_packet;
 use crate::comm::{Answer, Task};
 use crate::protocol::{Packet, PacketError, TransactionError};
 
@@ -48,7 +45,7 @@ impl QuicForwarder {
             tracing::debug!("sending packet {:?} to quic://{}", packet, remote);
 
             let packet_bytes = packet.into_bytes();
-            if let Err(e) = quic_send.write_all(&packet_bytes[..]).await {
+            if (quic_send.write_all(&packet_bytes[..]).await).is_err() {
                 tracing::warn!("QUIC forward to quic://{} failed with write error!", remote);
                 continue;
             }
@@ -63,7 +60,7 @@ impl QuicForwarder {
                 let r = Packet::parse_packet(buf, 0);
                 tracing::debug!("received response {:?} on quic stream", r);
                 if let Err(..) = r {
-                    let TransactionError { id, error } = r.unwrap_err();
+                    let TransactionError { id: _, error } = r.unwrap_err();
                     match error {
                         PacketError::ServFail => {
                             tracing::debug!(

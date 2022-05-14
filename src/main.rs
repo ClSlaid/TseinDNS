@@ -1,12 +1,12 @@
 // TODO: refract into a clap application
 use std::fs::File;
 use std::io::BufReader;
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV6};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::sync::Arc;
 
 use rustls_pemfile::{certs, pkcs8_private_keys};
 use tokio::net::{TcpListener, UdpSocket};
-use tokio::sync::{mpsc, OnceCell};
+use tokio::sync::mpsc;
 use tokio::time;
 use tokio_rustls::rustls::{Certificate, PrivateKey};
 use tracing::instrument;
@@ -247,11 +247,11 @@ async fn run(upstream_domain: &'static str, upstream_addr: SocketAddr) {
 
     tracing::info!("binding port 1954 as quic forwarding port");
     let forward = SocketAddr::new(IpAddr::from(Ipv6Addr::UNSPECIFIED), 1954);
-    let mut quic_config = rustls::ClientConfig::builder()
+    let quic_config = rustls::ClientConfig::builder()
         .with_safe_defaults()
         .with_root_certificates(roots)
         .with_no_client_auth();
-    quic_config.key_log = Arc::new(rustls::KeyLogFile::new());
+
     let mut endpoint = quinn::Endpoint::client(forward).unwrap();
     endpoint.set_default_client_config(quinn::ClientConfig::new(Arc::new(quic_config)));
     let forwarder = QuicForwarder::try_new(rec_recv, endpoint, upstream_domain, upstream_addr)

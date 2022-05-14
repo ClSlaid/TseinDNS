@@ -476,7 +476,7 @@ mod integrated_test {
         let outcome = super::Packet::parse_packet(p, 0);
         assert!(outcome.is_ok());
         let pkt = outcome.unwrap();
-        assert_eq!(pkt.question.is_some(), true);
+        assert!(pkt.question.is_some());
         assert_eq!(pkt.answers.len(), 0);
         assert_eq!(pkt.authorities.len(), 0);
         assert_eq!(pkt.additions.len(), 0);

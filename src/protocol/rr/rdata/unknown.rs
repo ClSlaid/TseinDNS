@@ -20,9 +20,9 @@ impl Unknown {
         self.rtype = RRType::UNKNOWN(rtype);
     }
 
-    pub fn parse_typeless(packet: bytes::Bytes, pos: usize) -> Result<(Self, usize), PacketError>
-        where
-            Self: Sized,
+    pub fn parse_typeless(packet: Bytes, pos: usize) -> Result<(Self, usize), PacketError>
+    where
+        Self: Sized,
     {
         let mut p = packet;
         let length = p.get_u16() as usize;
@@ -40,9 +40,9 @@ impl Unknown {
 impl Rdata for Unknown {
     /// Warning: will look backward to other fields in RR.
     /// use only when parsing at least a whole RR.
-    fn parse(packet: bytes::Bytes, pos: usize) -> Result<(Self, usize), PacketError>
-        where
-            Self: Sized,
+    fn parse(packet: Bytes, pos: usize) -> Result<(Self, usize), PacketError>
+    where
+        Self: Sized,
     {
         let packet_len = packet.len();
         if pos < 8 || pos > packet_len {
@@ -120,7 +120,7 @@ fn test_parse_and_to_bytes() {
             0, 233_u8, 0, 0, 0, 0, 0, 0, // 233 is the unknown type
             0_u8, 4, 0, 0, 2, 0, // this line is rdlength and rdata section
         ]
-            .to_vec(),
+        .to_vec(),
     );
     let parsed = Unknown::parse(full_data.clone(), 8);
     assert!(parsed.is_ok());

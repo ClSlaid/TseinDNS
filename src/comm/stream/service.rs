@@ -21,8 +21,8 @@ pub trait Listener {
 }
 
 pub struct Service<L>
-where
-    L: Listener + Send + Sync,
+    where
+        L: Listener + Send + Sync,
 {
     listener: L,
     task: mpsc::UnboundedSender<Task>,

@@ -1,8 +1,11 @@
 use std::net::SocketAddr;
 
 use anyhow::Result;
+use bytes::{Buf, Bytes};
+use futures::AsyncReadExt;
 use quinn::{ClientConfig, Connection, Endpoint, NewConnection, OpenBi, RecvStream, SendStream};
 use rand::random;
+use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc;
 
 use crate::comm::stream::write_packet;
@@ -38,11 +41,36 @@ impl QuicForwarder {
         while let Some(task) = self.rec.recv().await {
             let Task::Query(q, ans_to) = task;
             tracing::info!("forwarding new task from transaction layer.");
-            let (mut quic_send, mut quic_recv) = self.connection.open_bi().await;
+            let (mut quic_send, quic_recv) = self.connection.open_bi().await;
             let id = random::<u16>();
+
             let packet = Packet::new_query(id, q);
+            tracing::debug!("sending packet {:?} to quic://{}", packet, remote);
+
+            let packet_bytes = packet.into_bytes();
+            if let Err(e) = quic_send.write_u16(packet_bytes.len() as u16).await {
+                tracing::warn!(
+                    "QUIC forward to quic://{} failed with write error! {}",
+                    remote,
+                    e
+                );
+                continue;
+            }
+            if let Err(e) = quic_send.write_all(&packet_bytes[..]).await {
+                tracing::warn!("QUIC forward to quic://{} failed with write error!", remote);
+                continue;
+            }
+            tracing::debug!("packet sent to upstream");
+
             let checker = tokio::spawn(async move {
-                let r = Packet::parse_stream(&mut quic_recv).await;
+                let stream_id = quic_recv.id();
+                let v = quic_recv
+                    .read_to_end(u16::MAX as usize)
+                    .await
+                    .expect("failed read to end");
+                let mut buf = Bytes::from(v);
+                let _len = buf.get_u16();
+                let r = Packet::parse_packet(buf, 0);
                 tracing::debug!("received response {:?} on quic stream", r);
                 if let Err(..) = r {
                     let TransactionError { id, error } = r.unwrap_err();
@@ -50,7 +78,7 @@ impl QuicForwarder {
                         PacketError::ServFail => {
                             tracing::debug!(
                                 "connection closed on stream {} against {}",
-                                quic_recv.id(),
+                                stream_id,
                                 remote
                             );
                         }
@@ -73,9 +101,6 @@ impl QuicForwarder {
                 }
             });
             checkers.push(checker);
-            let _ = write_packet(&mut quic_send, packet.clone());
-            tracing::debug!("packet {:?} sent to quic://{}", packet, remote);
-            let _ = quic_send.finish().await;
         }
         for checker in checkers {
             let _ = tokio::join!(checker);

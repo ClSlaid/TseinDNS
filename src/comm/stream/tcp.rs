@@ -4,8 +4,8 @@ use async_trait::async_trait;
 use tokio::io::{ReadHalf, WriteHalf};
 use tokio::net::{TcpListener, TcpStream};
 
-use super::service::Listener;
 use super::Service;
+use super::service::Listener;
 
 pub type TcpService = Service<TcpListener>;
 

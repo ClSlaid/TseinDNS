@@ -12,13 +12,13 @@ use tokio_rustls::rustls::{Certificate, PrivateKey};
 use tracing::instrument;
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
-use tsein_dns::comm::client::QuicForwarder;
-use tsein_dns::comm::{TlsListener, TlsService};
 use tsein_dns::{
     cache::DnsCache,
     comm::{Answer, QuicService, Task, TcpService, UdpService},
-    protocol::{RRClass, RR},
+    protocol::{RR, RRClass},
 };
+use tsein_dns::comm::{TlsListener, TlsService};
+use tsein_dns::comm::client::QuicForwarder;
 
 const CACHE_SIZE: usize = 9192;
 
@@ -163,7 +163,7 @@ async fn run(upstream_domain: &'static str, upstream_addr: SocketAddr) {
 
     let mut roots = rustls::RootCertStore::empty();
     for cert in
-        rustls_native_certs::load_native_certs().expect("failed to read system native certificates")
+    rustls_native_certs::load_native_certs().expect("failed to read system native certificates")
     {
         roots.add(&Certificate(cert.0)).unwrap();
     }
@@ -240,9 +240,13 @@ async fn run(upstream_domain: &'static str, upstream_addr: SocketAddr) {
 
     tracing::info!("binding port 1954 as quic forwarding port");
     let forward = SocketAddr::new(IpAddr::from(Ipv6Addr::UNSPECIFIED), 1954);
-    let quic_config = quinn::ClientConfig::with_root_certificates(roots);
+    let mut quic_config = rustls::ClientConfig::builder()
+        .with_safe_defaults()
+        .with_root_certificates(roots)
+        .with_no_client_auth();
+    quic_config.key_log = Arc::new(rustls::KeyLogFile::new());
     let mut endpoint = quinn::Endpoint::client(forward).unwrap();
-    endpoint.set_default_client_config(quic_config);
+    endpoint.set_default_client_config(quinn::ClientConfig::new(Arc::new(quic_config)));
     let forwarder = QuicForwarder::try_new(rec_recv, endpoint, upstream_domain, upstream_addr)
         .await
         .unwrap();

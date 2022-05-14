@@ -156,17 +156,24 @@ async fn run() {
         }
     };
 
-    let serv_config = match rustls::ServerConfig::builder()
+    let mut serv_config = match rustls::ServerConfig::builder()
         .with_safe_defaults()
         .with_no_client_auth()
         .with_single_cert(certs, keys.remove(0))
     {
-        Ok(cfg) => Arc::new(cfg),
+        Ok(cfg) => cfg,
         Err(e) => {
             tracing::error!("cannot generate server config: {}", e);
             return;
         }
     };
+
+    serv_config.alpn_protocols = vec![
+        Vec::from(&b"dot"[..]),
+        Vec::from(&b"doq"[..]),
+        Vec::from(&b"doq-i11"[..]),
+    ];
+    let serv_config = Arc::new(serv_config);
 
     // init UDP serving ports
     tracing::info!("binding port 1053 as udp serving port");

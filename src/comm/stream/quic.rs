@@ -1,11 +1,13 @@
+use bytes::Bytes;
 use std::net::SocketAddr;
 
 use futures::StreamExt;
 use quinn::{Incoming, RecvStream, SendStream};
+use tokio::io::AsyncReadExt;
 use tokio::sync::mpsc;
 
-use crate::comm::{Answer, Task};
 use crate::comm::stream::{stream_fail, write_packet};
+use crate::comm::{Answer, Task};
 use crate::protocol::{Packet, PacketError, TransactionError};
 
 pub struct QuicService {
@@ -47,11 +49,21 @@ async fn worker(
 
     let mut is_suspected = false;
     loop {
-        let pkt = match Packet::parse_stream(&mut recv).await {
+        let mut v = vec![];
+        let r = recv.read_buf(&mut v).await;
+        let len = match r {
+            Ok(l) => l,
+            Err(_) => {
+                tracing::warn!("failed to read on stream {}", recv.id());
+                return;
+            }
+        };
+        tracing::debug!("read {} bytes on stream {}", len, recv.id());
+        let pkt = match Packet::parse_packet(Bytes::from(v), 0) {
             Err(TransactionError {
-                    id: _,
-                    error: PacketError::ServFail,
-                }) => {
+                id: _,
+                error: PacketError::ServFail,
+            }) => {
                 // read to end of file, quit
                 tracing::debug!(
                     "stream {} from quic:://{} reaches end of file",
@@ -147,7 +159,7 @@ async fn worker(
         packet.set_authorities(auths);
         packet.set_addtionals(additionals);
 
-        if write_packet(&mut send, packet).await.is_err() {
+        if send.write_all(&packet.into_bytes()[..]).await.is_err() {
             tracing::warn!(
                 "stream {} to quic://{} closed unexpectedly",
                 stream_id,
@@ -155,6 +167,7 @@ async fn worker(
             );
             return;
         }
+        send.finish().await;
     }
     tracing::debug!("stream {} to quic://{} closed", stream_id, client);
 }

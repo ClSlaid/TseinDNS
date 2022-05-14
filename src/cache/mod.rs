@@ -50,11 +50,11 @@ impl DnsCache {
         self.cache.insert_with_ttl(q, data, cost, ttl).await
     }
 
-    pub async fn get(&self, q: Question) -> Option<(RRData, time::Instant)> {
+    pub fn get(&self, q: Question) -> Option<(RRData, time::Instant)> {
         let val_ref = self.cache.get(&q);
         val_ref.as_ref()?;
         let val_ref = val_ref.unwrap();
-        let data = (*val_ref.value()).clone();
+        let data = val_ref.value().clone();
         Some(data)
     }
 }

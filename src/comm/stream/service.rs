@@ -73,7 +73,9 @@ impl<L: 'static + Listener + Send + Sync> Service<L> {
         let task_sender = self.task.clone();
         let (tx, rx) = oneshot::channel();
         let bell = self.bell.clone();
-        self.pool.insert(client, tx, 1).await;
+        self.pool
+            .insert_with_ttl(client, tx, 1, std::time::Duration::from_secs(5))
+            .await;
         let worker = Worker::new(client, stream, task_sender, bell, rx);
         tokio::spawn(async move { worker.run().await });
     }

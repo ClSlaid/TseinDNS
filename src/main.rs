@@ -61,13 +61,13 @@ async fn transaction(
         match task {
             Task::Query(query, ans_sender) => {
                 // looking up local cache
-                tracing::trace!("looking up local cache for query: {}", query.get_name());
+                tracing::debug!("looking up local cache for query: {}", query.get_name());
 
-                if let Some((rdata, ddl)) = cache.get(query.clone()).await {
+                if let Some((rdata, ddl)) = cache.get(query.clone()) {
                     // check if cached record is on-dated
                     let now = time::Instant::now();
                     if ddl > now {
-                        tracing::trace!(
+                        tracing::debug!(
                             "looked up cache for query successfully: `{}`, type: `{}`",
                             query.get_name(),
                             query.get_type()
@@ -81,7 +81,7 @@ async fn transaction(
                     }
                 }
 
-                tracing::info!(
+                tracing::warn!(
                     "unable to lookup query locally: {}, forwarding...",
                     query.get_name()
                 );

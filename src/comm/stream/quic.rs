@@ -12,10 +12,7 @@ use quinn::{Incoming, RecvStream, SendStream};
 use tokio::{io::AsyncReadExt, sync::mpsc};
 
 use crate::{
-    comm::{
-        stream::{stream_fail, write_packet},
-        Answer, Task,
-    },
+    comm::{stream::stream_fail, Answer, Task},
     protocol::{Packet, PacketError, TransactionError},
 };
 
@@ -176,7 +173,7 @@ async fn worker(
             );
             return;
         }
-        send.finish().await;
+        let _ = send.finish().await;
     }
     tracing::debug!("stream {} to quic://{} closed", stream_id, client);
 }

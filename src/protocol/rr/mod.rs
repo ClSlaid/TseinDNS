@@ -50,7 +50,7 @@ pub struct RR {
 }
 
 impl RR {
-    pub fn new(domain: Name, ttl: std::time::Duration, class: RRClass, r_data: RRData) -> Self {
+    pub fn new(domain: Name, ttl: time::Duration, class: RRClass, r_data: RRData) -> Self {
         let ty = r_data.get_type();
         let seconds = ttl.as_secs() as u32;
         RR {
@@ -141,7 +141,12 @@ fn rdata_parse(ty: RRType, packet: Bytes, offset: usize) -> Result<(RRData, usiz
 }
 
 impl PacketContent for RR {
-    fn parse(packet: bytes::Bytes, pos: usize) -> Result<Self, PacketError>
+    #[inline]
+    fn size(&self) -> usize {
+        self.size
+    }
+
+    fn parse(packet: Bytes, pos: usize) -> Result<Self, PacketError>
     where
         Self: Sized,
     {
@@ -162,11 +167,6 @@ impl PacketContent for RR {
             size,
             r_data: rdata,
         })
-    }
-
-    #[inline]
-    fn size(&self) -> usize {
-        self.size
     }
 
     fn into_bytes(self) -> Result<BytesMut, PacketError> {

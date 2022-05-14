@@ -25,7 +25,7 @@ impl Unknown {
         self.rtype = RRType::UNKNOWN(rtype);
     }
 
-    pub fn parse_typeless(packet: bytes::Bytes, pos: usize) -> Result<(Self, usize), PacketError>
+    pub fn parse_typeless(packet: Bytes, pos: usize) -> Result<(Self, usize), PacketError>
     where
         Self: Sized,
     {
@@ -45,7 +45,7 @@ impl Unknown {
 impl Rdata for Unknown {
     /// Warning: will look backward to other fields in RR.
     /// use only when parsing at least a whole RR.
-    fn parse(packet: bytes::Bytes, pos: usize) -> Result<(Self, usize), PacketError>
+    fn parse(packet: Bytes, pos: usize) -> Result<(Self, usize), PacketError>
     where
         Self: Sized,
     {

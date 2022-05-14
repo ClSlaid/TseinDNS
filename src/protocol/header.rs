@@ -358,6 +358,7 @@ impl Header {
         Ok(buf)
     }
 
+    #[allow(dead_code)]
     #[inline]
     fn size(&self) -> usize {
         12

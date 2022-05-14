@@ -38,9 +38,9 @@ pub async fn listening(forward: Arc<UdpSocket>, map: TaskMap) {
                 }
             }
             Err(TransactionError {
-                    id: Some(id),
-                    error,
-                }) => {
+                id: Some(id),
+                error,
+            }) => {
                 let err = vec![Answer::Error(error)];
                 {
                     let mut guard = map.lock().await;

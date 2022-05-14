@@ -4,7 +4,7 @@ use bytes::{Buf, BufMut, BytesMut};
 
 use crate::protocol::{domain::Name, error::PacketError};
 
-use super::{try_into_rdata_length, Rdata};
+use super::{Rdata, try_into_rdata_length};
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct Ns {
@@ -13,8 +13,8 @@ pub struct Ns {
 
 impl Rdata for Ns {
     fn parse(packet: bytes::Bytes, pos: usize) -> Result<(Self, usize), PacketError>
-    where
-        Self: Sized,
+        where
+            Self: Sized,
     {
         if pos + 4 > packet.len() {
             return Err(PacketError::FormatError);

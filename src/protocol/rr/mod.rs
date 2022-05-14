@@ -1,7 +1,7 @@
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use tokio::time;
 
-use rdata::{a::A, aaaa::Aaaa, cname::Cname, mx::Mx, ns::Ns, Rdata, soa::Soa, unknown::Unknown};
+use rdata::{a::A, aaaa::Aaaa, cname::Cname, mx::Mx, ns::Ns, soa::Soa, unknown::Unknown, Rdata};
 
 use crate::protocol::{PacketContent, RRType};
 
@@ -46,7 +46,7 @@ pub struct RR {
 }
 
 impl RR {
-    pub fn new(domain: Name, ttl: std::time::Duration, class: RRClass, r_data: RRData) -> Self {
+    pub fn new(domain: Name, ttl: time::Duration, class: RRClass, r_data: RRData) -> Self {
         let ty = r_data.get_type();
         let seconds = ttl.as_secs() as u32;
         RR {
@@ -137,9 +137,14 @@ fn rdata_parse(ty: RRType, packet: Bytes, offset: usize) -> Result<(RRData, usiz
 }
 
 impl PacketContent for RR {
-    fn parse(packet: bytes::Bytes, pos: usize) -> Result<Self, PacketError>
-        where
-            Self: Sized,
+    #[inline]
+    fn size(&self) -> usize {
+        self.size
+    }
+
+    fn parse(packet: Bytes, pos: usize) -> Result<Self, PacketError>
+    where
+        Self: Sized,
     {
         let mut p = packet.clone();
         let (domain, name_end) = Name::parse(packet.clone(), pos)?;
@@ -158,11 +163,6 @@ impl PacketContent for RR {
             size,
             r_data: rdata,
         })
-    }
-
-    #[inline]
-    fn size(&self) -> usize {
-        self.size
     }
 
     fn into_bytes(self) -> Result<BytesMut, PacketError> {

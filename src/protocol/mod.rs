@@ -8,15 +8,15 @@ pub use self::{
     error::{PacketError, TransactionError},
     header::Header,
     question::Question,
-    rr::RR,
     rr::RRData,
+    rr::RR,
 };
 
 trait PacketContent {
     fn size(&self) -> usize;
     fn parse(packet: Bytes, pos: usize) -> Result<Self, PacketError>
-        where
-            Self: Sized;
+    where
+        Self: Sized;
     fn into_bytes(self) -> Result<BytesMut, PacketError>;
 }
 
@@ -117,16 +117,17 @@ impl Packet {
     }
 
     pub async fn parse_stream<S>(stream: &mut S) -> Result<Self, TransactionError>
-        where
-            S: AsyncReadExt + Unpin,
+    where
+        S: AsyncReadExt + Unpin,
     {
-        tracing::trace!("parsing packet from stream");
+        tracing::debug!("parsing packet from stream");
         let len = stream.read_u16().await.map_err(|_| TransactionError {
             id: None,
             error: PacketError::ServFail, // treat as read an EOF, return a ServFail
         })?;
+        tracing::trace!("packet length {}", len);
         let header = Header::parse_stream(stream).await?;
-        tracing::trace!("parse header successfully with header: {:?}", header);
+        tracing::debug!("parse header successfully with header: {:?}", header);
         let id = Some(header.get_id());
         if len < 12 {
             let err = TransactionError {
@@ -137,9 +138,9 @@ impl Packet {
         }
 
         let to_read = (len - 12) as usize;
-        let mut pkt = BytesMut::from([0_u8; 65535].as_slice());
+        let mut pkt = Vec::from([0; 12]);
         let read = stream
-            .read(&mut pkt[12..])
+            .read_buf(&mut pkt)
             .await
             .map_err(|_| TransactionError {
                 id,
@@ -408,7 +409,7 @@ mod rr;
 mod integrated_test {
     use bytes::{BufMut, Bytes, BytesMut};
 
-    use crate::protocol::{header::Header, PacketContent, question::Question, RRClass, RRType};
+    use crate::protocol::{header::Header, question::Question, PacketContent, RRClass, RRType};
 
     #[test]
     fn parse_dns_lookup() {
@@ -475,7 +476,7 @@ mod integrated_test {
         let outcome = super::Packet::parse_packet(p, 0);
         assert!(outcome.is_ok());
         let pkt = outcome.unwrap();
-        assert_eq!(pkt.question.is_some(), true);
+        assert!(pkt.question.is_some());
         assert_eq!(pkt.answers.len(), 0);
         assert_eq!(pkt.authorities.len(), 0);
         assert_eq!(pkt.additions.len(), 0);

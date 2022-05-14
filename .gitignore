@@ -5,6 +5,7 @@
 
 # secret files such as keys
 /secret
+keylog
 
 # target files
 /target

@@ -16,7 +16,7 @@ use tokio::{
 };
 use tracing;
 
-use crate::protocol::{Packet, PacketError, Question, RR, TransactionError};
+use crate::protocol::{Packet, PacketError, Question, TransactionError, RR};
 
 pub mod client;
 pub(crate) mod forward;

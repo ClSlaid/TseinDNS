@@ -3,7 +3,7 @@ authors = ["ClSlaid <cailue@bupt.edu.cn>"]
 description = "[WIP] A DNS server supporting UDP, TCP, TLS and QUIC."
 edition = "2021"
 name = "tsein-dns"
-version = "0.1.4"
+version = "0.1.5"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

@@ -74,6 +74,9 @@ impl RR {
     pub fn get_ttl(&self) -> time::Duration {
         time::Duration::from_secs(self.ttl as u64)
     }
+    pub fn set_ttl(&mut self, ttl: time::Duration) {
+        self.ttl = ttl.as_secs() as u32;
+    }
 }
 
 // TODO: replace redundant code with macron

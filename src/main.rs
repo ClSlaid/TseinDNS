@@ -27,7 +27,7 @@ use tsein_dns::{
     },
 };
 
-const CACHE_SIZE: usize = 9192;
+const CACHE_SIZE: u64 = 9192;
 
 static KEY_PATH: &str = "secret/localhost+2-key.pem";
 static CERT_PATH: &str = "secret/localhost+2.pem";
@@ -160,7 +160,7 @@ async fn run(upstream_domain: &'static str, upstream_addr: SocketAddr) {
 
     // init cache
     tracing::info!("initialize cache with size: {}", CACHE_SIZE);
-    let cache = DnsCache::new(CACHE_SIZE as u64, rec_sender);
+    let cache = DnsCache::new(CACHE_SIZE, rec_sender);
 
     // deprecated udp forward service
     // tracing::info!("init UDP forwarding...");

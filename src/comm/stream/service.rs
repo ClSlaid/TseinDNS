@@ -4,9 +4,10 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use std::net::SocketAddr;
+use std::{net::SocketAddr, sync::Arc, time};
 
 use async_trait::async_trait;
+use moka::future::Cache;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     sync::{mpsc, oneshot},
@@ -38,15 +39,17 @@ where
     task: mpsc::UnboundedSender<Task>,
     message: mpsc::UnboundedReceiver<Message>,
     bell: mpsc::UnboundedSender<Message>,
-    pool: stretto::AsyncCache<SocketAddr, oneshot::Sender<()>>,
+    pool: Cache<SocketAddr, Arc<oneshot::Sender<()>>>,
 }
 
 impl<L: 'static + Listener + Send + Sync> Service<L> {
-    pub fn new(listener: L, task: mpsc::UnboundedSender<Task>, limit: usize) -> Self {
+    pub fn new(listener: L, task: mpsc::UnboundedSender<Task>, limit: u64) -> Self {
         let (bell, message) = mpsc::unbounded_channel::<Message>();
-        let pool = stretto::AsyncCacheBuilder::new(10 * limit, limit as i64)
-            .finalize()
-            .unwrap();
+        let timeout = time::Duration::from_secs(4);
+        let pool = Cache::builder()
+            .time_to_idle(timeout)
+            .max_capacity(limit)
+            .build();
         Self {
             listener,
             task,
@@ -73,9 +76,7 @@ impl<L: 'static + Listener + Send + Sync> Service<L> {
         let task_sender = self.task.clone();
         let (tx, rx) = oneshot::channel();
         let bell = self.bell.clone();
-        self.pool
-            .insert_with_ttl(client, tx, 1, std::time::Duration::from_secs(5))
-            .await;
+        self.pool.insert(client, Arc::new(tx)).await;
         let worker = Worker::new(client, stream, task_sender, bell, rx);
         tokio::spawn(async move { worker.run().await });
     }
@@ -98,8 +99,7 @@ impl<L: 'static + Listener + Send + Sync> Service<L> {
                 let task = task.clone();
                 let msg_sender = msg_sender.clone();
                 let handler = Worker::serve(stream, client, task, msg_sender);
-                pool.insert_with_ttl(client, handler, 1, std::time::Duration::from_secs(120))
-                    .await;
+                pool.insert(client, Arc::new(handler)).await;
                 tracing::debug!("worker for {} started", client_uri);
             }
         });
@@ -115,7 +115,7 @@ impl<L: 'static + Listener + Send + Sync> Service<L> {
                         pool.get(&client);
                     }
                     Message::ShutDown(client) => {
-                        pool.remove(&client).await;
+                        pool.invalidate(&client).await;
                         tracing::info!("worker for {}://{} shutdown", protocol, client);
                     }
                 }

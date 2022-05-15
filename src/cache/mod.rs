@@ -4,57 +4,133 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use stretto::AsyncCache;
-use tokio::time;
+use std::sync::Arc;
 
-use crate::protocol::{Question, RRData, RR};
+use async_recursion::async_recursion;
+use moka::future::Cache;
+use tokio::{sync::mpsc, time};
+
+use crate::{
+    comm::{Answer, Task},
+    protocol::Question,
+};
+
+mod raw_cache;
+
+pub type Data = Vec<Answer>;
+type RawCache = Cache<Question, (Data, time::Instant)>;
 
 #[derive(Clone)]
 pub struct DnsCache {
-    cache: AsyncCache<Question, (RRData, time::Instant)>,
-    coster: fn(&RRData) -> i64,
-}
-
-fn coster(rdata: &RRData) -> i64 {
-    match rdata {
-        RRData::A(_) => 5,
-        RRData::Aaaa(_) => 1,
-        RRData::Cname(_) => 1,
-        RRData::Mx(_) => 1,
-        RRData::Ns(_) => 2,
-        RRData::Soa(_) => 5,
-        RRData::Unknown(_) => 0,
-    }
+    cache: RawCache,
+    rec: Arc<mpsc::UnboundedSender<Task>>,
 }
 
 impl DnsCache {
-    pub fn new(num_counters: usize, max_cost: i64) -> DnsCache {
-        let cache = AsyncCache::new(num_counters, max_cost).unwrap();
-        Self { cache, coster }
+    pub fn new(capacity: u64, rec_sender: mpsc::UnboundedSender<Task>) -> DnsCache {
+        let cache = RawCache::builder()
+            .max_capacity(capacity)
+            .time_to_live(time::Duration::from_secs(600))
+            .build();
+        let rec = Arc::new(rec_sender);
+        Self { cache, rec }
     }
 
-    pub async fn append_rdata(&mut self, q: Question, data: RRData, ttl: u32) -> bool {
-        let time = time::Duration::from_secs(ttl as u64);
-        let cost = (self.coster)(&data);
-        let ddl = time::Instant::now() + time;
-        let data = (data, ddl);
-        self.cache.insert_with_ttl(q, data, cost, time).await
+    fn get_from_raw_cache(&self, key: &Question) -> Option<Data> {
+        if let Some((data, inst)) = self.cache.get(key) {
+            if inst > time::Instant::now() {
+                return Some(data);
+            }
+        }
+        None
     }
 
-    pub async fn insert_rr(&mut self, q: Question, data: RR) -> bool {
-        let ttl = data.get_ttl();
-        let ddl = time::Instant::now() + ttl;
-        let rdata = data.into_rdata();
-        let cost = (self.coster)(&rdata);
-        let data = (rdata, ddl);
-        self.cache.insert_with_ttl(q, data, cost, ttl).await
-    }
+    // get will surely return a record, if it does exist
+    // or it will return a None, then, just NXDOMAIN.
+    #[async_recursion]
+    pub async fn get(&mut self, q: Question) -> Vec<Answer> {
+        if let Some(data) = self.get_from_raw_cache(&q) {
+            return data;
+        }
 
-    pub fn get(&self, q: Question) -> Option<(RRData, time::Instant)> {
-        let val_ref = self.cache.get(&q);
-        val_ref.as_ref()?;
-        let val_ref = val_ref.unwrap();
-        let data = val_ref.value().clone();
-        Some(data)
+        tracing::warn!(
+            "unable to lookup query {} locally, forwarding...",
+            q.get_name()
+        );
+        let (got, ddl) = self
+            .cache
+            .get_with(q.clone(), forward(self.rec.clone(), q.clone()))
+            .await;
+        let ttl = ddl - time::Instant::now();
+        got.into_iter()
+            .map(|rr| match rr {
+                Answer::Error(e) => Answer::Error(e),
+                Answer::Answer(mut a) => {
+                    a.set_ttl(ttl);
+                    Answer::Answer(a)
+                }
+                Answer::NameServer(mut ns) => {
+                    ns.set_ttl(ttl);
+                    Answer::NameServer(ns)
+                }
+                Answer::Additional(mut additional) => {
+                    additional.set_ttl(ttl);
+                    Answer::Additional(additional)
+                }
+            })
+            .collect()
     }
+}
+
+async fn forward(rec: Arc<mpsc::UnboundedSender<Task>>, query: Question) -> (Data, time::Instant) {
+    let name = query.get_name();
+    tracing::debug!("start forwarding query: {}", name);
+    let (ans_to, mut ans_from) = mpsc::unbounded_channel();
+    let task = Task::Query(query, ans_to);
+    let _ = rec.send(task);
+
+    let mut min_ttl = time::Duration::from_secs(600);
+    let mut answers = vec![];
+    while let Some(ans) = ans_from.recv().await {
+        match ans {
+            Answer::Error(e) => {
+                tracing::warn!("get error from upstream: {:?}", e);
+                min_ttl = time::Duration::from_secs(600);
+                answers.clear();
+                answers.push(Answer::Error(e));
+                break;
+            }
+            Answer::Answer(a) => {
+                min_ttl = if min_ttl < a.get_ttl() {
+                    min_ttl
+                } else {
+                    a.get_ttl()
+                };
+                answers.push(Answer::Answer(a));
+            }
+            Answer::NameServer(ns) => {
+                min_ttl = if min_ttl < ns.get_ttl() {
+                    min_ttl
+                } else {
+                    ns.get_ttl()
+                };
+                answers.push(Answer::NameServer(ns));
+            }
+            Answer::Additional(additional) => {
+                min_ttl = if min_ttl < additional.get_ttl() {
+                    min_ttl
+                } else {
+                    additional.get_ttl()
+                };
+                answers.push(Answer::Additional(additional));
+            }
+        }
+    }
+    tracing::info!(
+        "Got {} RRs from upstream with minimum ttl: {}s",
+        answers.len(),
+        min_ttl.as_secs()
+    );
+    let ddl = time::Instant::now() + min_ttl;
+    (answers, ddl)
 }

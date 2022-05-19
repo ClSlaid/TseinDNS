@@ -47,7 +47,7 @@ impl QuicForwarder {
             let Task::Query(q, ans_to) = task;
             tracing::info!("forwarding new task from transaction layer.");
             let (mut quic_send, quic_recv) = self.connection.open_bi().await;
-            let id = random::<u16>();
+            let id = 0;
 
             let packet = Packet::new_query(id, q);
             tracing::debug!("sending packet {:?} to quic://{}", packet, remote);

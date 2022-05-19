@@ -53,128 +53,100 @@ async fn worker(
     let stream_id = send.id().index();
     tracing::debug!("serving stream {} from quic://{}", stream_id, client);
 
-    let mut is_suspected = false;
-    loop {
-        let mut v = vec![];
-        let r = recv.read_buf(&mut v).await;
-        let len = match r {
-            Ok(l) => l,
-            Err(_) => {
-                tracing::warn!("failed to read on stream {}", recv.id());
-                return;
-            }
-        };
-        tracing::debug!("read {} bytes on stream {}", len, recv.id());
-        let pkt = match Packet::parse_packet(Bytes::from(v), 0) {
-            Err(TransactionError {
-                id: _,
-                error: PacketError::ServFail,
-            }) => {
-                // read to end of file, quit
-                tracing::debug!(
-                    "stream {} from quic:://{} reaches end of file",
-                    stream_id,
-                    client
-                );
-                break;
-            }
-            Err(e) => {
-                // packet got error
-                tracing::debug!(
-                    "stream {} from quic:://{} got malformed data: {}",
-                    stream_id,
-                    client,
-                    e
-                );
-                if stream_fail(&mut send, e).await.is_err() || is_suspected {
-                    tracing::warn!(
-                        "stream {} to quic:://{} closed unexpectedly",
-                        stream_id,
-                        client
-                    );
-                    break;
-                };
-                is_suspected = true;
-                continue;
-            }
-            Ok(pkt) => {
-                if !pkt.is_query() {
-                    let id = pkt.get_id();
-                    let error = PacketError::FormatError;
-                    let fail = TransactionError {
-                        id: Some(id),
-                        error,
-                    };
-                    if stream_fail(&mut send, fail).await.is_err() || is_suspected {
-                        tracing::warn!("stream {} to quic:://{} closed unexpectedly", id, client);
-                        // quit directly
-                        return;
-                    }
-                    is_suspected = true;
-                    continue;
-                }
-                pkt
-            }
-        };
-
-        // received a processable query
-        // forgive the client;
-        is_suspected = false;
-
-        let id = pkt.get_id();
-        let query = pkt.question.unwrap();
-        let (ans_send, mut ans_recv) = mpsc::unbounded_channel();
-        let task = Task::Query(query.clone(), ans_send);
-        let _ = task_sender.send(task);
-
-        let mut answers = vec![];
-        let mut auths = vec![];
-        let mut additionals = vec![];
-        while let Some(ans) = ans_recv.recv().await {
-            match ans {
-                Answer::Error(error) => {
-                    let err = TransactionError {
-                        id: Some(id),
-                        error,
-                    };
-                    if stream_fail(&mut send, err).await.is_err() || is_suspected {
-                        tracing::warn!(
-                            "stream {} to quic://{} closed unexpectedly",
-                            stream_id,
-                            client
-                        );
-                        return;
-                    }
-                    is_suspected = true;
-                    break;
-                }
-                Answer::Answer(a) => {
-                    answers.push(a);
-                }
-                Answer::NameServer(a) => {
-                    auths.push(a);
-                }
-                Answer::Additional(a) => {
-                    additionals.push(a);
-                }
-            }
+    let mut v = vec![];
+    let r = recv.read_buf(&mut v).await;
+    let len = match r {
+        Ok(l) => l,
+        Err(_) => {
+            tracing::warn!("failed to read on stream {}", recv.id());
+            return;
         }
-        let mut packet = Packet::new_plain_answer(id);
-        packet.set_question(query);
-        packet.set_answers(answers);
-        packet.set_authorities(auths);
-        packet.set_addtionals(additionals);
-
-        if send.write_all(&packet.into_bytes()[..]).await.is_err() {
-            tracing::warn!(
-                "stream {} to quic://{} closed unexpectedly",
+    };
+    tracing::debug!("read {} bytes on stream {}", len, recv.id());
+    let pkt = match Packet::parse_packet(Bytes::from(v), 0) {
+        Err(TransactionError {
+            id: _,
+            error: PacketError::ServFail,
+        }) => {
+            // read to end of file, quit
+            tracing::debug!(
+                "stream {} from quic:://{} reaches end of file",
                 stream_id,
                 client
             );
             return;
         }
-        let _ = send.finish().await;
+        Err(e) => {
+            // packet got error
+            tracing::debug!(
+                "stream {} from quic:://{} got malformed data: {}",
+                stream_id,
+                client,
+                e
+            );
+            let _ = stream_fail(&mut send, e).await.is_err();
+            return;
+        }
+        Ok(pkt) => {
+            if !pkt.is_query() {
+                let id = pkt.get_id();
+                let error = PacketError::FormatError;
+                let fail = TransactionError {
+                    id: Some(id),
+                    error,
+                };
+                let _ = stream_fail(&mut send, fail).await.is_err();
+                return;
+            }
+            pkt
+        }
+    };
+
+    let id = pkt.get_id();
+    let query = pkt.question.unwrap();
+    let (ans_send, mut ans_recv) = mpsc::unbounded_channel();
+    let task = Task::Query(query.clone(), ans_send);
+    let _ = task_sender.send(task);
+
+    let mut answers = vec![];
+    let mut auths = vec![];
+    let mut additionals = vec![];
+    while let Some(ans) = ans_recv.recv().await {
+        match ans {
+            Answer::Error(error) => {
+                let err = TransactionError {
+                    id: Some(id),
+                    error,
+                };
+                let _ = stream_fail(&mut send, err).await.is_err();
+                break;
+            }
+            Answer::Answer(a) => {
+                answers.push(a);
+            }
+            Answer::NameServer(a) => {
+                auths.push(a);
+            }
+            Answer::Additional(a) => {
+                additionals.push(a);
+            }
+        }
     }
+    let mut packet = Packet::new_plain_answer(id);
+    packet.set_question(query);
+    packet.set_answers(answers);
+    packet.set_authorities(auths);
+    packet.set_addtionals(additionals);
+
+    if send.write_all(&packet.into_bytes()[..]).await.is_err() {
+        tracing::warn!(
+            "stream {} to quic://{} closed unexpectedly",
+            stream_id,
+            client
+        );
+        return;
+    }
+    let _ = send.finish().await;
     tracing::debug!("stream {} to quic://{} closed", stream_id, client);
 }
 

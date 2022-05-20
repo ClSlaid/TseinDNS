@@ -150,9 +150,9 @@ impl UdpService {
         task_sender: mpsc::UnboundedSender<Task>,
     ) -> Result<(), std::io::Error> {
         let s = self.clone();
+        let mut packet = BytesMut::from(&[0_u8; 1024][..]);
         loop {
             // receive packet
-            let mut packet = BytesMut::from(&[0_u8; 1024][..]);
             let (n, client) = s.udp.recv_from(&mut packet).await?;
 
             // validate packet

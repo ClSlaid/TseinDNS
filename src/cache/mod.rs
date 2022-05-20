@@ -36,30 +36,17 @@ impl DnsCache {
         Self { cache, rec }
     }
 
-    fn get_from_raw_cache(&self, key: &Question) -> Option<Data> {
-        if let Some((data, inst)) = self.cache.get(key) {
-            if inst > time::Instant::now() {
-                return Some(data);
-            }
-        }
-        None
-    }
-
     // get will surely return a record, if it does exist
     // or it will return a None, then, just NXDOMAIN.
     #[async_recursion]
     pub async fn get(&mut self, q: Question) -> Vec<Answer> {
-        if let Some(data) = self.get_from_raw_cache(&q) {
-            return data;
-        }
-
-        tracing::warn!(
-            "unable to lookup query {} locally, forwarding...",
-            q.get_name()
-        );
         let (got, ddl) = self
             .cache
-            .get_with(q.clone(), forward(self.rec.clone(), q.clone()))
+            .get_with_if(
+                q.clone(),
+                forward(self.rec.clone(), q.clone()),
+                |(_, ddl)| ddl <= &time::Instant::now(),
+            )
             .await;
         let ttl = ddl - time::Instant::now();
         got.into_iter()

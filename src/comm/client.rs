@@ -9,7 +9,6 @@ use std::net::SocketAddr;
 use anyhow::Result;
 use bytes::Bytes;
 use quinn::{Connection, Endpoint, NewConnection, RecvStream, SendStream};
-use rand::random;
 use tokio::sync::mpsc;
 
 use crate::{

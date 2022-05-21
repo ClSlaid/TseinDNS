@@ -1390,6 +1390,7 @@ dependencies = [
  "bytes",
  "color-eyre",
  "futures",
+ "futures-lite",
  "moka",
  "quinn",
  "rand",

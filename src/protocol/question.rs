@@ -112,3 +112,15 @@ fn test_parse() {
     assert_eq!(class, RRClass::Internet);
     assert_eq!(size, ques.size());
 }
+
+#[test]
+fn test_to_bytes() {
+    let bytes = bytes::Bytes::from(vec![
+        7, b'e', b'x', b'a', b'm', b'p', b'l', b'e', 3, b'c', b'o', b'm', 0, // domain name
+        0, 1, // type
+        0, 1, // class
+    ]);
+    let q = Question::parse(bytes.clone(), 0).unwrap();
+    let b = q.into_bytes().unwrap();
+    assert_eq!(b, bytes)
+}

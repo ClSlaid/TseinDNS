@@ -14,9 +14,6 @@ use crate::{
     comm::{Answer, Task},
     protocol::Question,
 };
-
-mod raw_cache;
-
 pub type Data = Vec<Answer>;
 type RawCache = Cache<Question, (Data, time::Instant)>;
 

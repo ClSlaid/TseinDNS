@@ -226,7 +226,7 @@ impl Packet {
     /// make a binary
     pub fn into_bytes(self) -> Bytes {
         let mut buf = BytesMut::new();
-        let h = self.header.into_bytes().unwrap();
+        let h = self.header.try_into_bytes().unwrap();
         buf.put_slice(&h[..]);
         if let Some(question) = self.question {
             let q = question.into_bytes().unwrap();
@@ -299,27 +299,28 @@ impl Packet {
     }
 }
 
-/// this (toy) macron are used for simplify definition of map-like enumerators.
-///
-/// using:
-/// ```
-/// pub_map_enum!{
-///     Foo<i32> {
-///         Foo => 0,
-///         Bar => 1;  // <- this is a ';' not a ','
-///         Default    // fallback name
-///     }
-/// }
-/// ```
-/// defines:
-/// ```
-/// pub enum Foo {
-///     Foo,
-///     Bar,
-///     Default(i32),   // unmatched value will fallback into Unknown
-/// }
-/// ```
-/// and will automatically implements `From<i32>` for `Foo` and `From<Foo>` for `i32`.
+// this (toy) macron are used for simplify definition of map-like enumerators.
+//
+// using:
+// ```
+//
+// pub_map_enum!{
+//     Foo<i32> {
+//         Foo => 0,
+//         Bar => 1;  // <- this is a ';' not a ','
+//         Default    // fallback name
+//     }
+// }
+// ```
+// defines:
+// ```
+// pub enum Foo {
+//     Foo,
+//     Bar,
+//     Default(i32),   // unmatched value will fallback into Unknown
+// }
+// ```
+// and will automatically implements `From<i32>` for `Foo` and `From<Foo>` for `i32`.
 macro_rules! pub_map_enum {
     ($name:ident <$t:ty> {$($key: ident => $value: expr),*; $fallback:ident}) => {
         #[derive(PartialEq, Eq, Debug, Copy, Clone, Hash)]
@@ -414,10 +415,11 @@ mod rr;
 mod integrated_test {
     use bytes::{BufMut, Bytes, BytesMut};
 
-    use crate::protocol::{header::Header, question::Question, PacketContent, RRClass, RRType};
+    use crate::protocol::{
+        header::Header, question::Question, Packet, PacketContent, RRClass, RRType, RR,
+    };
 
-    #[test]
-    fn parse_dns_lookup() {
+    fn example_lookup_raw() -> Bytes {
         let mut packet = BytesMut::new();
         // create header
         packet.put_u16(0); // id == 0;
@@ -438,7 +440,39 @@ mod integrated_test {
         packet.put_u16(u16::from(q_type));
         packet.put_u16(u16::from(q_class));
 
-        let packet: Bytes = packet.into();
+        packet.into()
+    }
+
+    #[test]
+    fn test_modify() {
+        let mut p = Packet::new_plain_answer(0);
+        let slc = &[
+            7, 101, 120, 97, 109, 112, 108, 101, 3, 99, 111, 109, 0, 0, 1, 0, 1, 0, 1, 191, 82, 0,
+            4, 19, 19, 81, 0,
+        ][..];
+        let ans_raw = Bytes::from(slc);
+        let answer = RR::parse(ans_raw, 0).unwrap();
+        p.add_answer(answer);
+        assert!(!p.is_query());
+        assert!(p.question.is_none());
+        assert_eq!(p.answers.len(), 1);
+    }
+
+    fn example_answer() -> Bytes {
+        let mut p = Packet::new_plain_answer(0);
+        let slc = &[
+            7, 101, 120, 97, 109, 112, 108, 101, 3, 99, 111, 109, 0, 0, 1, 0, 1, 0, 1, 191, 82, 0,
+            4, 19, 19, 81, 0,
+        ][..];
+        let ans_raw = Bytes::from(slc);
+        let answer = RR::parse(ans_raw, 0).unwrap();
+        p.add_answer(answer);
+        p.into_bytes()
+    }
+
+    #[test]
+    fn parse_dns_lookup() {
+        let packet = example_lookup_raw();
 
         let header = Header::parse(packet.clone(), 0);
         assert!(header.is_ok());
@@ -473,12 +507,12 @@ mod integrated_test {
 
         let p = Bytes::from(packet.clone());
 
-        let outcome = super::Packet::parse_packet(p, 0);
+        let outcome = Packet::parse_packet(p, 0);
         assert!(outcome.is_err());
 
         packet[7] = 0;
         let p = Bytes::from(packet.clone());
-        let outcome = super::Packet::parse_packet(p, 0);
+        let outcome = Packet::parse_packet(p, 0);
         assert!(outcome.is_ok());
         let pkt = outcome.unwrap();
         assert!(pkt.question.is_some());
@@ -487,5 +521,25 @@ mod integrated_test {
         assert_eq!(pkt.additions.len(), 0);
         assert_eq!(pkt.header.get_id(), 0);
         assert_eq!(pkt.question.unwrap().get_name().to_string(), "example.com.");
+    }
+
+    #[test]
+    fn test_to_bytes() {
+        let p = example_answer();
+        let parsed = Packet::parse_packet(p.clone(), 0).unwrap().into_bytes();
+        assert_eq!(p, parsed);
+    }
+
+    #[tokio::test]
+    async fn test_parse_stream() {
+        let mut packet = BytesMut::new();
+        let ans_pkt = &example_answer()[..];
+        packet.put_u16(ans_pkt.len() as u16);
+        packet.put(ans_pkt);
+        let mut packet = &packet[..];
+        let r = Packet::parse_stream(&mut packet).await;
+        assert!(r.is_ok());
+        let sr = r.unwrap();
+        assert_eq!(sr.into_bytes(), example_answer());
     }
 }

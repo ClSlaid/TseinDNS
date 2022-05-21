@@ -183,3 +183,57 @@ impl PacketContent for RR {
         Ok(buf)
     }
 }
+
+#[cfg(test)]
+mod rr_test {
+    use std::{net::Ipv4Addr, time};
+
+    use crate::protocol::{Name, PacketContent, RRClass, RRData, RRType, RR};
+
+    #[test]
+    fn test_getters() {
+        let a = super::A::from("11.4.5.14".parse::<Ipv4Addr>().unwrap());
+        let name = Name::try_from("example.com").unwrap();
+        let du = time::Duration::from_secs(114514);
+        let rr = RR::new(name, du, RRClass::Internet, RRData::A(a));
+        assert_eq!(rr.get_ttl(), du);
+        assert_eq!(rr.get_domain().to_string(), "example.com.");
+        assert_eq!(rr.get_type(), RRType::A);
+    }
+
+    #[test]
+    fn test_setters() {
+        let a = super::A::from("11.4.5.14".parse::<Ipv4Addr>().unwrap());
+        let name = Name::try_from("example.com").unwrap();
+        let du = time::Duration::from_secs(114514);
+        let mut rr = RR::new(name, du, RRClass::Internet, RRData::A(a));
+
+        assert_eq!(rr.get_ttl(), du);
+        let new_du = time::Duration::from_secs(1919810);
+        rr.set_ttl(new_du);
+        assert_eq!(rr.get_ttl(), new_du);
+    }
+
+    #[test]
+    fn test_to_bytes_and_parse() {
+        let a = super::A::from("19.19.81.0".parse::<Ipv4Addr>().unwrap());
+        let name = Name::try_from("example.com").unwrap();
+        let du = time::Duration::from_secs(114514);
+        let rr = RR::new(name, du, RRClass::Internet, RRData::A(a));
+        let rdata = match rr.clone().into_rdata() {
+            RRData::A(a) => a,
+            _ => {
+                assert!(false);
+                unreachable!()
+            }
+        };
+        assert_eq!(rdata, a);
+        let bytes = rr.clone().into_bytes().unwrap();
+        let parsed = RR::parse(bytes.into(), 0);
+        assert!(parsed.is_ok());
+        let parsed_rr = parsed.unwrap();
+        assert_eq!(parsed_rr.get_ttl(), du);
+        assert_eq!(parsed_rr.get_type(), rr.get_type());
+        assert_eq!(parsed_rr.get_domain(), rr.get_domain());
+    }
+}

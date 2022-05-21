@@ -223,7 +223,7 @@ impl Header {
 
         let b = buf.get_u8();
         let is_rec_avl = b & RA_MASK == RA_MASK;
-        let z = (b & Z_MASK) >> 5;
+        let z = (b & Z_MASK) >> 4;
         let response = Rcode::from(b & RC_MASK);
 
         let questions = buf.get_u16();
@@ -287,7 +287,7 @@ impl Header {
             error: error.clone(),
         })?;
         let is_rec_avl = b & RA_MASK == RA_MASK;
-        let z = (b & Z_MASK) >> 5;
+        let z = (b & Z_MASK) >> 4;
         let response = Rcode::from(b & RC_MASK);
 
         let questions = stream.read_u16().await.map_err(|_| TransactionError {
@@ -333,7 +333,7 @@ impl Header {
         })
     }
 
-    pub fn into_bytes(self) -> Result<BytesMut, PacketError> {
+    pub fn try_into_bytes(self) -> Result<BytesMut, PacketError> {
         let mut buf = BytesMut::with_capacity(12);
         buf.put_u16(self.id);
         let a = {
@@ -399,13 +399,14 @@ pub_map_enum! {
     }
 }
 
+#[cfg(test)]
 mod test {
-    #[test]
-    fn test_parse_header() {
-        use bytes::{BufMut, Bytes, BytesMut};
+    use bytes::{BufMut, Bytes, BytesMut};
 
-        use super::{Op, Rcode};
+    use super::{Op, Rcode};
+    use crate::protocol::Header;
 
+    fn example_packet() -> Bytes {
         let mut packet = BytesMut::new();
         // create header
         packet.put_u16(0); // id == 0;
@@ -416,10 +417,14 @@ mod test {
         packet.put_u16(0); // NSCOUNT = 0;
         packet.put_u16(0); // ARCOUNT = 0;
                            // creat question
+        Bytes::from(packet)
+    }
 
-        let h_packet = Bytes::from(packet);
+    #[test]
+    fn test_parse_header() {
+        let packet = example_packet();
 
-        let h_result = super::Header::parse(h_packet, 0);
+        let h_result = super::Header::parse(packet, 0);
         assert!(h_result.is_ok());
         let h = h_result.unwrap();
 
@@ -431,12 +436,31 @@ mod test {
         assert!(h.is_rec_des());
 
         assert!(!h.is_rec_avl());
-        assert_eq!(h.get_z(), 1);
+        assert_eq!(h.get_z(), 2);
         assert_eq!(h.get_rcode(), Rcode::NoError);
 
         assert_eq!(h.question_count(), 1);
         assert_eq!(h.answer_count(), 0);
         assert_eq!(h.authority_count(), 0);
         assert_eq!(h.addition_count(), 0);
+    }
+
+    #[test]
+    fn test_to_bytes() {
+        let h = Header::parse(example_packet(), 0).unwrap();
+        let bin = h.try_into_bytes().unwrap();
+        let raw = example_packet();
+        assert_eq!(bin.len(), raw.len());
+        assert_eq!(&bin[..], &raw[..]);
+    }
+
+    #[tokio::test]
+    async fn test_parse_stream() {
+        let mut s = &example_packet()[..];
+        let h = Header::parse_stream(&mut s).await;
+        assert!(h.is_ok());
+        let h = h.unwrap();
+        let raw = Bytes::from(h.try_into_bytes().unwrap());
+        assert_eq!(raw, example_packet());
     }
 }

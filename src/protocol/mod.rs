@@ -8,7 +8,6 @@ use std::fmt::Display;
 
 use bytes::{BufMut, Bytes, BytesMut};
 use tokio::io::AsyncReadExt;
-use crate::protocol::header::{Op, Rcode};
 
 pub use self::{
     domain::Name,
@@ -17,6 +16,7 @@ pub use self::{
     question::Question,
     rr::{RRData, RR},
 };
+use crate::protocol::header::{Op, Rcode};
 
 trait PacketContent {
     fn size(&self) -> usize;
@@ -265,11 +265,15 @@ impl Packet {
 
     #[inline]
     /// opcode of the dns packet
-    pub fn get_op(&self) -> Op {self.header.get_op()}
+    pub fn get_op(&self) -> Op {
+        self.header.get_op()
+    }
 
     #[inline]
     /// is the answer authorized
-    pub fn is_auth(&self) -> bool {self.header.is_auth()}
+    pub fn is_auth(&self) -> bool {
+        self.header.is_auth()
+    }
 
     #[inline]
     /// is the packet truncated
@@ -422,6 +426,14 @@ pub_map_enum! {RRType<u16> {
     Ns => 2,
     Cname => 5,
     Soa => 6,
+    Mb => 7,
+    Mg => 8,
+    Mr => 9,
+    Null => 10,
+    Wks => 11,
+    Ptr => 12,
+    HInfo => 13,
+    MInfo => 14,
     Mx => 15,
     Txt => 16,
     Aaaa => 28;
@@ -436,6 +448,14 @@ impl Display for RRType {
             RRType::Cname => String::from("CNAME"),
             RRType::Soa => String::from("SOA"),
             RRType::Mx => String::from("MX"),
+            RRType::Mb => String::from("MB"),
+            RRType::Mg => String::from("MG"),
+            RRType::Mr => String::from("MR"),
+            RRType::Null => String::from("NULL"),
+            RRType::Wks => String::from("WKS"),
+            RRType::Ptr => String::from("PTR"),
+            RRType::HInfo => String::from("HINFO"),
+            RRType::MInfo => String::from("MINFO"),
             RRType::Txt => String::from("TXT"),
             RRType::Aaaa => String::from("AAAA"),
             RRType::UNKNOWN(val) => format!("UNKNOWN({})", val),

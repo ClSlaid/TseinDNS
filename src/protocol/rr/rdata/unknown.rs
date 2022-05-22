@@ -30,6 +30,7 @@ impl Unknown {
         Self: Sized,
     {
         let mut p = packet;
+        p.advance(pos);
         let length = p.get_u16() as usize;
         let data = Bytes::copy_from_slice(&p[..length]);
         let unknown = Self {
@@ -61,21 +62,8 @@ impl Rdata for Unknown {
         let tp = p.get_u16();
 
         // Parse remaining parts of the packet
-        let mut p = packet;
-        p.advance(pos);
-        let length = p.get_u16() as usize;
-
-        if length + pos > packet_len {
-            return Err(PacketError::FormatError);
-        }
-
-        let data = Bytes::copy_from_slice(&p[..length]);
-        let unknown = Self {
-            length,
-            rtype: RRType::UNKNOWN(tp),
-            data,
-        };
-        let end = pos + 2 + length;
+        let (mut unknown, end) = Unknown::parse_typeless(packet, pos)?;
+        unknown.set_type(tp);
         Ok((unknown, end))
     }
 

@@ -11,10 +11,18 @@ use crate::protocol::{domain::Name, error::PacketError};
 pub mod a;
 pub mod aaaa;
 pub mod cname;
+pub mod hinfo;
+pub mod mb;
+pub mod mg;
+pub mod minfo;
+pub mod mr;
 pub mod mx;
+pub mod nl;
 pub mod ns;
+pub mod pt; // PTR
 pub mod soa;
 pub mod txt;
+pub mod wks;
 
 pub mod unknown;
 

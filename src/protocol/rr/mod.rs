@@ -6,12 +6,16 @@
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use rdata::{
-    a::A, aaaa::Aaaa, cname::Cname, mx::Mx, ns::Ns, soa::Soa, txt::Txt, unknown::Unknown, Rdata,
+    a::A, aaaa::Aaaa, cname::Cname, hinfo::HInfo, mg::Mg, minfo::MInfo, mx::Mx, nl::Null, ns::Ns,
+    pt::Ptr, soa::Soa, txt::Txt, unknown::Unknown, wks::Wks, Rdata,
 };
 use tokio::time;
 
 use super::{domain::Name, error::PacketError, RRClass};
-use crate::protocol::{PacketContent, RRType};
+use crate::protocol::{
+    rr::rdata::{mb::Mb, mr::Mr},
+    PacketContent, RRType,
+};
 
 mod rdata;
 
@@ -90,7 +94,15 @@ pub enum RRData {
     A(A),
     Aaaa(Aaaa),
     Cname(Cname),
+    HInfo(HInfo),
+    Ptr(Ptr),
     Mx(Mx),
+    Mb(Mb),
+    Mg(Mg),
+    Mr(Mr),
+    Wks(Wks),
+    Null(Null),
+    MInfo(MInfo),
     Ns(Ns),
     Soa(Soa),
     Txt(Txt),
@@ -105,8 +117,16 @@ impl RRData {
             Self::Cname(_) => RRType::Cname,
             Self::Mx(_) => RRType::Mx,
             Self::Ns(_) => RRType::Ns,
+            Self::Mb(_) => RRType::Mb,
+            Self::Mg(_) => RRType::Mg,
             Self::Soa(_) => RRType::Soa,
             Self::Txt(_) => RRType::Txt,
+            Self::Wks(_) => RRType::Wks,
+            Self::Ptr(_) => RRType::Ptr,
+            Self::Mr(_) => RRType::Mr,
+            Self::MInfo(_) => RRType::MInfo,
+            Self::HInfo(_) => RRType::HInfo,
+            Self::Null(_) => RRType::Null,
             Self::Unknown(unknown) => unknown.get_type(),
         }
     }
@@ -116,8 +136,16 @@ impl RRData {
             Self::Aaaa(aaaa) => aaaa.try_into_bytes(),
             Self::Cname(cname) => cname.try_into_bytes(),
             Self::Mx(mx) => mx.try_into_bytes(),
+            Self::Mb(mb) => mb.try_into_bytes(),
+            Self::Mg(mg) => mg.try_into_bytes(),
             Self::Ns(ns) => ns.try_into_bytes(),
             Self::Soa(soa) => soa.try_into_bytes(),
+            Self::Ptr(ptr) => ptr.try_into_bytes(),
+            Self::Mr(mr) => mr.try_into_bytes(),
+            Self::Wks(wks) => wks.try_into_bytes(),
+            Self::MInfo(m_info) => m_info.try_into_bytes(),
+            Self::HInfo(h_info) => h_info.try_into_bytes(),
+            Self::Null(null) => null.try_into_bytes(),
             Self::Txt(txt) => txt.try_into_bytes(),
             Self::Unknown(unknown) => unknown.try_into_bytes(),
         }
@@ -144,7 +172,10 @@ macro_rules! parse_rdata {
 }
 
 fn rdata_parse(ty: RRType, packet: Bytes, offset: usize) -> Result<(RRData, usize), PacketError> {
-    let (rdata, end) = parse_rdata!(ty, packet, offset, A, Aaaa, Ns, Cname, Soa, Txt, Mx);
+    let (rdata, end) = parse_rdata!(
+        ty, packet, offset, A, Aaaa, Ns, Cname, Mb, Mg, Mr, MInfo, HInfo, Null, Ptr, Wks, Soa, Txt,
+        Mx
+    );
     Ok((rdata, end))
 }
 
@@ -162,6 +193,7 @@ impl PacketContent for RR {
         let (domain, name_end) = Name::parse(packet.clone(), pos)?;
         p.advance(name_end);
         let ty = RRType::from(p.get_u16());
+        tracing::trace!("parsed with type:{}", ty);
         let class = RRClass::from(p.get_u16());
         let ttl = p.get_u32();
         let rdata_begin = name_end + 8;

@@ -115,65 +115,79 @@ impl Header {
 }
 
 impl Header {
+    #[inline]
     /// get transaction id
     pub fn get_id(&self) -> u16 {
         self.id
     }
+
+    #[inline]
     /// is a dns query or not
     pub fn is_query(&self) -> bool {
         self.is_query
     }
 
+    #[inline]
     /// opcode of the dns packet
     pub fn get_op(&self) -> Op {
         self.opcode
     }
 
+    #[inline]
     /// is the answer authorized answer
     pub fn is_auth(&self) -> bool {
         self.is_auth
     }
 
+    #[inline]
     /// is the packet truncated
     pub fn is_trunc(&self) -> bool {
         self.is_trunc
     }
 
+    #[inline]
     /// is the query recursion desired
     pub fn is_rec_des(&self) -> bool {
         self.is_rec_des
     }
 
+    #[inline]
     /// is the dns server recursion available
     pub fn is_rec_avl(&self) -> bool {
         self.is_rec_avl
     }
 
+    #[inline]
     /// get the z record of the dns server
     pub fn get_z(&self) -> u8 {
         self.z
     }
 
+    #[inline]
     /// get the rcode in header
     pub fn get_rcode(&self) -> Rcode {
         self.response
     }
 
+    #[inline]
     /// how many questions are there in the packet
     pub fn question_count(&self) -> u16 {
         self.questions
     }
 
+    #[inline]
     /// how many answers are there in the packet
     pub fn answer_count(&self) -> u16 {
         self.answers
     }
 
+    #[inline]
     /// how many ns records are there in the packet
     pub fn authority_count(&self) -> u16 {
         self.authorities
     }
 
+    #[inline]
     /// how many additional RRs are in the packet
     pub fn addition_count(&self) -> u16 {
         self.additional

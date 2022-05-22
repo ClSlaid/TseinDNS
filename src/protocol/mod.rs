@@ -8,6 +8,7 @@ use std::fmt::Display;
 
 use bytes::{BufMut, Bytes, BytesMut};
 use tokio::io::AsyncReadExt;
+use crate::protocol::header::{Op, Rcode};
 
 pub use self::{
     domain::Name,
@@ -250,12 +251,78 @@ impl Packet {
 }
 
 impl Packet {
+    #[inline]
+    /// get transaction id
     pub fn get_id(&self) -> u16 {
         self.header.get_id()
     }
 
+    #[inline]
+    /// is a dns query or not
     pub fn is_query(&self) -> bool {
         self.header.is_query()
+    }
+
+    #[inline]
+    /// opcode of the dns packet
+    pub fn get_op(&self) -> Op {self.header.get_op()}
+
+    #[inline]
+    /// is the answer authorized
+    pub fn is_auth(&self) -> bool {self.header.is_auth()}
+
+    #[inline]
+    /// is the packet truncated
+    pub fn is_trunc(&self) -> bool {
+        self.header.is_trunc()
+    }
+
+    #[inline]
+    /// is the query recursion desired
+    pub fn is_rec_des(&self) -> bool {
+        self.header.is_rec_des()
+    }
+
+    #[inline]
+    /// is the dns server recursion available
+    pub fn is_rec_avl(&self) -> bool {
+        self.header.is_rec_avl()
+    }
+
+    #[inline]
+    /// get the z record of the dns server
+    pub fn get_z(&self) -> u8 {
+        self.header.get_z()
+    }
+
+    #[inline]
+    /// get the rcode in header
+    pub fn get_rcode(&self) -> Rcode {
+        self.header.get_rcode()
+    }
+
+    #[inline]
+    /// how many questions are there in the packet
+    pub fn question_count(&self) -> u16 {
+        self.header.question_count()
+    }
+
+    #[inline]
+    /// how many answers are there in the packet
+    pub fn answer_count(&self) -> u16 {
+        self.header.answer_count()
+    }
+
+    #[inline]
+    /// how many ns records are there in the packet
+    pub fn authority_count(&self) -> u16 {
+        self.header.authority_count()
+    }
+
+    #[inline]
+    /// how many additional RRs are in the packet
+    pub fn addition_count(&self) -> u16 {
+        self.header.addition_count()
     }
 }
 

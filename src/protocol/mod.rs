@@ -356,6 +356,7 @@ pub_map_enum! {RRType<u16> {
     Cname => 5,
     Soa => 6,
     Mx => 15,
+    Txt => 16,
     Aaaa => 28;
     UNKNOWN
 }}
@@ -368,6 +369,7 @@ impl Display for RRType {
             RRType::Cname => String::from("CNAME"),
             RRType::Soa => String::from("SOA"),
             RRType::Mx => String::from("MX"),
+            RRType::Txt => String::from("TXT"),
             RRType::Aaaa => String::from("AAAA"),
             RRType::UNKNOWN(val) => format!("UNKNOWN({})", val),
         };

@@ -5,7 +5,9 @@
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
-use rdata::{a::A, aaaa::Aaaa, cname::Cname, mx::Mx, ns::Ns, soa::Soa, unknown::Unknown, Rdata};
+use rdata::{
+    a::A, aaaa::Aaaa, cname::Cname, mx::Mx, ns::Ns, soa::Soa, txt::Txt, unknown::Unknown, Rdata,
+};
 use tokio::time;
 
 use super::{domain::Name, error::PacketError, RRClass};
@@ -91,6 +93,7 @@ pub enum RRData {
     Mx(Mx),
     Ns(Ns),
     Soa(Soa),
+    Txt(Txt),
     Unknown(Unknown),
 }
 
@@ -103,6 +106,7 @@ impl RRData {
             Self::Mx(_) => RRType::Mx,
             Self::Ns(_) => RRType::Ns,
             Self::Soa(_) => RRType::Soa,
+            Self::Txt(_) => RRType::Txt,
             Self::Unknown(unknown) => unknown.get_type(),
         }
     }
@@ -114,6 +118,7 @@ impl RRData {
             Self::Mx(mx) => mx.try_into_bytes(),
             Self::Ns(ns) => ns.try_into_bytes(),
             Self::Soa(soa) => soa.try_into_bytes(),
+            Self::Txt(txt) => txt.try_into_bytes(),
             Self::Unknown(unknown) => unknown.try_into_bytes(),
         }
     }
@@ -139,7 +144,7 @@ macro_rules! parse_rdata {
 }
 
 fn rdata_parse(ty: RRType, packet: Bytes, offset: usize) -> Result<(RRData, usize), PacketError> {
-    let (rdata, end) = parse_rdata!(ty, packet, offset, A, Aaaa, Ns, Cname, Soa, Mx);
+    let (rdata, end) = parse_rdata!(ty, packet, offset, A, Aaaa, Ns, Cname, Soa, Txt, Mx);
     Ok((rdata, end))
 }
 

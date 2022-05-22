@@ -14,6 +14,7 @@ pub mod cname;
 pub mod mx;
 pub mod ns;
 pub mod soa;
+pub mod txt;
 
 pub mod unknown;
 

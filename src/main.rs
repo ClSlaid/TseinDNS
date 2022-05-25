@@ -72,14 +72,18 @@ async fn transaction(mut tasks: mpsc::UnboundedReceiver<Task>, cache: DnsCache) 
 }
 
 fn main() {
+    // init console layer
+    let console_layer = console_subscriber::spawn();
     // init logger
     if let Ok(local_timer) = fmt::time::OffsetTime::local_rfc_3339() {
         tracing_subscriber::registry()
+            .with(console_layer)
             .with(fmt::layer().with_timer(local_timer))
             .init();
     } else {
         let sys_timer = fmt::time::SystemTime;
         tracing_subscriber::registry()
+            .with(console_layer)
             .with(fmt::layer().with_timer(sys_timer))
             .init();
     }

@@ -3,27 +3,32 @@ authors = ["ClSlaid <cailue@bupt.edu.cn>"]
 description = "[WIP] A DNS server supporting UDP, TCP, TLS and QUIC."
 edition = "2021"
 name = "tsein-dns"
-version = "0.1.5"
+version = "0.1.6"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dev-dependencies]
 futures-lite = "1.12.0"
 
 [dependencies]
-async-trait = "0.1.53"
+async-trait = "0.1.56"
 async-recursion = "1.0.0"
 anyhow = "1.0.57"
 rand = "0.8.5"
 bytes = "1.1.0"
 color-eyre = "0.6.1"
-quinn = "0.8.2"
+quinn = "0.8.3"
 thiserror = "1.0.31"
 futures = "0.3.21"
 rustls = "0.20.6"
 rustls-pemfile = "1.0.0"
 rustls-native-certs = "0.6.2"
-tokio = { version = "1.18.2", features = ["full"] }
+tokio = { version = "1.19.2", features = ["full"] }
 tokio-rustls = "0.23.4"
-tracing = "0.1.34"
-tracing-subscriber = { version = "0.3.11", features = ["std", "time", "fmt", "local-time"] }
-moka = { version = "0.8.4", features = ["future"] }
+tracing = "0.1.35"
+tracing-subscriber = { version = "0.3.11", features = [
+  "std",
+  "time",
+  "fmt",
+  "local-time",
+] }
+moka = { version = "0.8.5", features = ["future"] }

@@ -19,7 +19,7 @@ impl Rdata for Wks {
         }
 
         let mut pos = pos;
-        let mut p = packet.clone();
+        let mut p = packet;
         if pos + 2 >= p.len() {
             return Err(PacketError::FormatError);
         }

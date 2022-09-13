@@ -7,7 +7,7 @@ use crate::protocol::{
     Name, PacketError,
 };
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Ptr {
     domain: Name,
 }

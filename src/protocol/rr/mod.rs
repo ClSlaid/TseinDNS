@@ -260,7 +260,6 @@ mod rr_test {
         let rdata = match rr.clone().into_rdata() {
             RRData::A(a) => a,
             _ => {
-                assert!(false);
                 unreachable!()
             }
         };

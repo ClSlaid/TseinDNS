@@ -11,7 +11,7 @@ use bytes::{Buf, BufMut, BytesMut};
 use super::{try_into_rdata_length, Rdata};
 use crate::protocol::{domain::Name, error::PacketError};
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub struct Ns {
     domain: Name,
 }

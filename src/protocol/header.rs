@@ -353,14 +353,14 @@ impl Header {
         let a = {
             let q: u8 = if self.is_query { 0 } else { 1 };
             let op: u8 = self.opcode.into();
-            let aa = if self.is_auth { 1 } else { 0 };
-            let tc = if self.is_trunc { 1 } else { 0 };
-            let rd = if self.is_rec_des { 1 } else { 0 };
+            let aa = u8::from(self.is_auth);
+            let tc = u8::from(self.is_trunc);
+            let rd = u8::from(self.is_rec_des);
             (q << 7) | (op << 3) | (aa << 2) | (tc << 1) | rd
         };
         buf.put_u8(a);
         let b = {
-            let ra = if self.is_rec_avl { 1 } else { 0 };
+            let ra = u8::from(self.is_rec_avl);
             let rc: u8 = self.response.into();
             (ra << 7) | (self.z << 4) | rc
         };

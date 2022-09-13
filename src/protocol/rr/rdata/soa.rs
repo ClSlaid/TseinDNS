@@ -9,7 +9,7 @@ use bytes::{Buf, BufMut, Bytes, BytesMut};
 use super::{try_into_rdata_length, Rdata};
 use crate::protocol::{domain::Name, error::PacketError};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Soa {
     mname: Name,
     rname: Name,

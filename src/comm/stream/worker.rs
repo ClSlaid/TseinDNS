@@ -72,20 +72,11 @@ where
         let mut checker = self.m_receiver;
 
         // while still not shut down
-        loop {
-            match checker.try_recv() {
-                Err(TryRecvError::Empty) => {
-                    // this worker is still online
-                    // update
-                    let msg = Message::Update(self.client);
-                    let _ = updater.send(msg);
-                }
-                _ => {
-                    // this worker is scheduled to close
-                    // quit normally
-                    break;
-                }
-            }
+        while let Err(TryRecvError::Empty) = checker.try_recv() {
+            // this worker is still online
+            // update
+            let msg = Message::Update(self.client);
+            let _ = updater.send(msg);
 
             let read = Packet::parse_stream(&mut rd).await;
             if read.is_err() {
